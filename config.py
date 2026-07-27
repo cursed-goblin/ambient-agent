@@ -1,7 +1,8 @@
 """
 Central configuration. Every tunable lives here -- nothing hardcoded in modules.
 
-Override any value with an env var of the same name, e.g.
+Override any value with an env var, either AMBIENT_-prefixed or bare, e.g.
+    AMBIENT_WHISPER_MODEL=small.en ./run.sh
     WHISPER_MODEL=base.en CONFIRM_EVERYTHING=1 ./run.sh
 """
 
@@ -12,7 +13,12 @@ from pathlib import Path
 
 
 def _env(key: str, default):
-    raw = os.environ.get(key)
+    # Accept both AMBIENT_WHISPER_MODEL and WHISPER_MODEL. The prefixed form is
+    # what run.sh and the README use; the bare form stays supported for quick
+    # one-off overrides on the command line.
+    raw = os.environ.get("AMBIENT_" + key)
+    if raw is None:
+        raw = os.environ.get(key)
     if raw is None:
         return default
     if isinstance(default, bool):
@@ -98,7 +104,7 @@ WHISPER_PROMPT = _env(
 # TTS  (spec 4.5)
 # --------------------------------------------------------------------------
 PIPER_BIN = _env("PIPER_BIN", "piper")
-PIPER_VOICE = _env("PIPER_VOICE", str(MODEL_DIR / "en_US-amy-medium.onnx"))
+PIPER_VOICE = _env("PIPER_VOICE", str(MODEL_DIR / "piper" / "en_US-amy-medium.onnx"))
 PIPER_SAMPLE_RATE = _env("PIPER_SAMPLE_RATE", 22_050)
 # Playback chunk. Small enough to cut cleanly on barge-in (spec 4.3).
 TTS_CHUNK_MS = _env("TTS_CHUNK_MS", 200)

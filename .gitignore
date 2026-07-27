@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Runtime state -- audit log, transcripts
+var/
+
+# Models are large binaries; download them per the README
+models/
+!models/.gitkeep
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Screenshots are only taken on demand and must never be committed
+*.png
+*.jpg

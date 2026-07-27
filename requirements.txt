@@ -1,0 +1,32 @@
+# Phase 1 -- CPU only. No GPU, no CUDA, no Ollama yet.
+#
+#   python3 -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements.txt
+#
+# System packages first (Ubuntu 24.04):
+#   sudo apt install python3-venv libportaudio2 pipewire-audio-client-libraries \
+#                    wmctrl brightnessctl playerctl pulseaudio-utils network-manager
+
+# --- audio i/o -------------------------------------------------------
+numpy>=1.26,<3
+sounddevice>=0.4.6
+
+# --- wake word (CPU, onnx) -------------------------------------------
+openwakeword>=0.6.0
+onnxruntime>=1.17
+
+# --- voice activity detection ----------------------------------------
+# torch CPU build is ~200MB. Install the CPU wheel explicitly to avoid
+# pulling ~2.5GB of CUDA libraries you do not need yet:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.2
+
+# --- speech to text --------------------------------------------------
+faster-whisper>=1.0.0
+
+# --- text to speech --------------------------------------------------
+# The `piper` binary itself is installed separately (see README).
+piper-tts>=1.2.0
+
+# --- dev -------------------------------------------------------------
+pytest>=8.0

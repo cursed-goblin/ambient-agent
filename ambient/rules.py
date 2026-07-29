@@ -222,10 +222,11 @@ RULES: list[tuple[str, str, str, RuleSlots]] = [
     # ---- Read-only system info (SAFE, spec 4.15) ----
     (r"\b(what.?s the |)time( is it|)\b", "info.time", SAFE, _no_slots),
     (r"\b(what.?s |)(today.?s |the |)date\b", "info.date", SAFE, _no_slots),
-    (r"\b(battery|charge|power) (status|level|percent|percentage|left)?\b",
+    (r"\b(battery|charge)( (status|level|percent|percentage|left))?\b"
+     r"|\bpower (status|level|percent|percentage|left)\b",
      "info.battery", SAFE, _no_slots),
-    (r"\b(disk|storage) (usage|space|free)\b", "info.disk", SAFE, _no_slots),
-    (r"\b(memory|ram) (usage|free|left|available)\b", "info.memory", SAFE, _no_slots),
+    (r"\b(disk|storage)( (usage|space|free|left))?\b", "info.disk", SAFE, _no_slots),
+    (r"\b(memory|ram)( (usage|free|left|available))?\b", "info.memory", SAFE, _no_slots),
     (r"\b(wifi|wi fi|network|internet) (status|connection|connected)\b",
      "info.wifi", SAFE, _no_slots),
 

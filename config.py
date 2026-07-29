@@ -127,9 +127,21 @@ START_MODE = _env("START_MODE", "ambient")   # ambient | assist | manual
 CAMERA_IDLE_TIMEOUT_S = _env("CAMERA_IDLE_TIMEOUT_S", 15.0)
 
 # --------------------------------------------------------------------------
-# Escalation  (Phase 4 -- off in Phase 1)
+# UI  (interim Phase 2 -- see ambient/ui.py)
+# --------------------------------------------------------------------------
+UI_ENABLED = _env("UI_ENABLED", False)
+# Loopback only. The UI is unauthenticated -- do not bind it to a network you
+# do not control. For a cloud dev box, forward the port instead.
+UI_HOST = _env("UI_HOST", "127.0.0.1")
+UI_PORT = _env("UI_PORT", 8765)
+
+# --------------------------------------------------------------------------
+# Escalation  (spec 4.7). Provider is chosen once by ambient/provider.py and
+# stored in var/llm.json; these are only the shared limits.
 # --------------------------------------------------------------------------
 LLM_ENABLED = _env("LLM_ENABLED", False)
+# Hard cap enforced in code, not just asked for in the prompt.
+LLM_MAX_SENTENCES = _env("LLM_MAX_SENTENCES", 3)
 # Swap this one line to move between cloud dev and local production.
 LLM_BASE_URL = _env("LLM_BASE_URL", "http://localhost:11434/v1")
 LLM_API_KEY = _env("LLM_API_KEY", "ollama")

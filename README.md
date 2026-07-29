@@ -23,7 +23,7 @@ machine yet, and none of this phase requires one.
 
 | Part | State |
 | --- | --- |
-| Rules layer (`ambient/rules.py`) | **Tested.** 25 unit tests pass. |
+| Rules layer (`ambient/rules.py`) | **Tested.** 26 unit tests pass. |
 | Config, state, audit log | Written, imports clean. |
 | OS actions (`ambient/actions.py`) | Written, `DRY_RUN` safe by default. Needs a real Ubuntu box. |
 | Audio capture / playback | Written, **never run against a real mic.** |
@@ -67,8 +67,6 @@ cd ../..
 `piper` itself: either `pip install piper-tts` (gives you a `piper` command) or
 grab a release binary from `github.com/rhasspy/piper` and put it on your PATH.
 
-After cloning, make the scripts executable: `chmod +x run.sh setup_audio.sh`.
-
 ---
 
 ## Run it, in this order
@@ -76,7 +74,7 @@ After cloning, make the scripts executable: `chmod +x run.sh setup_audio.sh`.
 **Step 1 — prove the logic works, with no audio at all.**
 
 ```bash
-python3 tests/test_rules.py     # should print 25/25 passed
+python3 tests/test_rules.py     # should print 26/26 passed
 ./run.sh --text                 # type commands, read replies
 ```
 
@@ -163,6 +161,10 @@ ambient/vad.py         Silero VAD + separate stricter barge-in detector
 ambient/wake.py        openWakeWord
 ambient/stt.py         faster-whisper + partial transcripts
 ambient/tts.py         Piper streaming, cancellable mid-utterance
+ambient/provider.py    provider chooser (Groq / local Ollama / none)
+ambient/llm.py         OpenAI-compatible client + guarded escalator
+ambient/ui.py          stdlib HTTP + SSE server for the stopgap UI
+ui/index.html          single-file dark UI, zero dependencies
 ambient/main.py        the orchestrator
 tools/check_audio.py   AEC verification
 tests/test_rules.py    runs anywhere, no models needed
@@ -185,7 +187,7 @@ frames the entire time. If speaking blocked the loop, barge-in would be
 impossible by construction.
 
 **Unknown input is refused, not guessed.** `rules.match()` returns `None` and
-the assistant says so. In Phase 4 an LLM gets a chance before the refusal, but
+the assistant says so. An LLM now gets a chance before the refusal, but
 the refusal stays as the floor. This is the anti-hallucination design: the
 system is allowed to be limited, it is not allowed to be confidently wrong.
 
@@ -213,3 +215,86 @@ Phase 2 is the Tauri overlay (`ambient/state.py` already publishes to
 subscribers, which is the hook it needs). Phase 3b is the extractive Q&A
 engine — SearxNG plus trafilatura, also CPU-only. Both are buildable on the
 laptop you have now. Buy the GPU machine last, when Phase 4 actually needs it.
+
+---
+
+## AI escalation (new)
+
+The rules layer is still the only thing that can touch your machine. When the
+rules do not match, the request is now handed to a language model that has **no
+tools at all** — it can produce words and nothing else. If it is not confident,
+it replies `REFUSE` and you get the same honest "Sorry, I can't do that yet."
+
+Pick the provider once:
+
+```bash
+./run.sh --setup
+```
+
+| Choice | Runs where | Needs | Private |
+|---|---|---|---|
+| **1. Groq API** | cloud | free key from console.groq.com/keys | no — escalated *text* leaves the machine |
+| **2. Local Ollama** | your machine | `ollama pull qwen2.5:7b-instruct` | yes — nothing leaves |
+| **3. None** | — | — | yes — rules only, as before |
+
+Groq exists so you can build and test the whole pipeline on the laptop you have
+now, with no GPU. When you get the GPU machine, run `--setup` again and choose
+Ollama; nothing else in the code changes. **Your microphone audio never leaves
+this machine in either mode** — only the transcribed text of an escalated
+request, and only in Groq mode.
+
+Verify the connection:
+
+```bash
+./run.sh --check-ai
+```
+
+Guardrails enforced in code, not merely requested in the prompt:
+
+- replies are hard-capped at three sentences (`AMBIENT_LLM_MAX_SENTENCES`)
+- any reply claiming an action happened ("I've opened…", "I've ordered…") is
+  discarded and turned into a refusal, because the model cannot act
+- markdown is stripped — everything here is meant to be spoken
+- 30-second timeout; a failed call refuses instead of hanging
+
+Overrides, if you would rather not use the wizard:
+
+```bash
+export AMBIENT_LLM_PROVIDER=groq
+export AMBIENT_LLM_API_KEY=gsk_...
+export AMBIENT_LLM_MODEL=llama-3.3-70b-versatile
+```
+
+The saved config lives in `var/llm.json`, mode `600`, and is git-ignored.
+
+## Simple UI (new)
+
+A stopgap so you can *see* what the agent is doing before the Tauri overlay
+exists. Zero dependencies — stdlib HTTP server, one HTML file, no npm.
+
+```bash
+./run.sh --ui              # voice loop + UI
+./run.sh --ui --no-audio   # UI only, no mic (good for a cloud dev box)
+./run.sh --text            # no UI at all, as before
+```
+
+Then open <http://127.0.0.1:8765>. You get a status dot (listening / thinking /
+speaking), the live partial transcript, the conversation, and a text box you can
+type into. It binds to loopback only and is **not authenticated** — on a remote
+dev box, forward the port rather than changing `AMBIENT_UI_HOST`.
+
+This is not the final interface. The plan is still an always-on-top transparent
+overlay that shows only a listening indicator and a caption, with a panel that
+appears only when there is something to look at.
+
+## Fixed since the first run
+
+Two defects a real session exposed:
+
+- bare `battery`, `disk`, `memory` were refused, because the pattern demanded a
+  qualifier (`battery level`). The tests only ever exercised the qualified form,
+  which is why 25/25 passed while the real thing failed. Regression test added.
+- `open browser` said "I don't know how to open browser" in dry run on a machine
+  with no Chromium installed. Dry run now short-circuits before the
+  binary-exists check, so a rehearsal works anywhere; only a real run reports a
+  missing app.

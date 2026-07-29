@@ -122,6 +122,16 @@ def test_info_intents():
     check("wifi status", "info.wifi")
 
 
+def test_info_bare_words():
+    # Regression: a real session refused a bare "battery" because the
+    # qualifier word ("level", "percent", ...) was mandatory in the pattern.
+    check("battery", "info.battery")
+    check("disk", "info.disk")
+    check("memory", "info.memory")
+    check("ram", "info.memory")
+    check("storage left", "info.disk")
+
+
 # ----------------------------------------------------------------- modes
 
 def test_mode_switching():

@@ -155,11 +155,13 @@ def _resolve_app(name: str) -> Optional[str]:
 def open_app(intent: Intent) -> str:
     requested = intent.slots.get("app", "")
     binary = _resolve_app(requested)
-    if not binary:
-        return f"I don't know how to open {requested}."
     if config.DRY_RUN:
-        log_event("dry_run", command=binary)
+        # Do not require the binary to exist in dry run -- the point is to
+        # rehearse the intent, possibly on a machine without that app.
+        log_event("dry_run", command=binary or requested, resolved=bool(binary))
         return f"Would open {requested}."
+    if not binary:
+        return f"I can't find {requested} on this machine."
     try:
         subprocess.Popen(
             [binary],

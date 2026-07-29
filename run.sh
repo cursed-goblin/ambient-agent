@@ -5,6 +5,10 @@
 #   ./run.sh --text       type commands, no mic/speaker needed
 #   ./run.sh --devices    list audio devices
 #   ./run.sh --say "hi"   TTS smoke test
+#   ./run.sh --setup      choose the AI model (Groq API or local Ollama)
+#   ./run.sh --check-ai   send one test request to that model
+#   ./run.sh --ui         also serve the simple UI on http://127.0.0.1:8765
+#   ./run.sh --ui --no-audio   UI only, no mic (good for a cloud dev box)
 
 set -euo pipefail
 cd "$(dirname "$0")"

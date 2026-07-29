@@ -1,21 +1,24 @@
 """
-Phase 1 orchestrator -- the ambient voice loop.
+Orchestrator -- the ambient loop, plus AI escalation and the local UI.
 
-    wake word -> AEC'd mic -> VAD -> Whisper -> rules layer -> Piper
-                                   ^                              |
-                                   +------ barge-in interrupt ----+
+    wake word -> AEC'd mic -> VAD -> Whisper -> rules -> Piper
+                                   ^              |
+                                   |              +-- no match? -> AI model
+                                   +---- barge-in interrupt ------+
 
-No LLM. No network. No GPU required.
+The rules layer is still the only thing that can touch the operating system.
+The AI model can only produce words. That separation is the whole safety story:
+a model that cannot act cannot act wrongly.
 
-The single most important property in this file: while we are speaking, the
-main loop KEEPS READING MIC FRAMES and feeds them to a barge-in detector.
-Speaking happens on a worker thread. That is what makes interruption feel
-like "Hey Google" instead of like a school project.
+While we are speaking, the main loop KEEPS READING MIC FRAMES and feeds them to
+a barge-in detector. Speaking happens on a worker thread. That is what makes
+interruption feel like "Hey Google" rather than a school project.
 """
 
 from __future__ import annotations
 
 import argparse
+import queue
 import signal
 import sys
 import threading
@@ -25,7 +28,17 @@ from typing import Optional
 import numpy as np
 
 import config
-from ambient import actions, rules, stt, tts, vad as vad_mod, wake as wake_mod
+from ambient import (
+    actions,
+    llm,
+    provider,
+    rules,
+    stt,
+    tts,
+    ui as ui_mod,
+    vad as vad_mod,
+    wake as wake_mod,
+)
 from ambient.audio_io import AudioUnavailable, MicStream, Speaker, list_devices
 from ambient.state import Activity, Mode, current, log_event, timer
 
@@ -33,13 +46,17 @@ STATE = current()
 
 
 class Assistant:
-    def __init__(self, text_only: bool = False) -> None:
+    def __init__(self, text_only: bool = False, with_ui: bool = False,
+                 no_audio: bool = False) -> None:
         self.text_only = text_only
+        self.with_ui = with_ui
+        self.no_audio = no_audio
         self.running = True
 
         # --- brains that need no audio ---------------------------------
         self.timers = actions.TimerService(on_fire=self._announce)
         self.dispatch = actions.build_dispatch(self.timers)
+        self.escalator: Optional[llm.Escalator] = None
 
         # --- audio stack ----------------------------------------------
         self.vad = None
@@ -52,21 +69,48 @@ class Assistant:
         self.mic: Optional[MicStream] = None
         self.speaker: Optional[Speaker] = None
 
+        # --- ui --------------------------------------------------------
+        self.ui: Optional[ui_mod.UiServer] = None
+        self._ui_queue: "queue.Queue[str]" = queue.Queue()
+
         self.awake = False
         self.awake_until = 0.0
         self._speech_thread: Optional[threading.Thread] = None
+        self._handle_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # setup
     # ------------------------------------------------------------------
-    def load(self) -> None:
+    def load(self, interactive_setup: bool = True) -> None:
         config.ensure_dirs()
+
+        # Which model handles what the rules cannot? Asked once, remembered.
+        cfg = provider.resolve(interactive=interactive_setup)
+        self.escalator = llm.load_escalator(cfg)
+        print(f"[ai] {provider.describe(cfg)}")
+        if self.escalator.enabled and not cfg.get("private"):
+            print("[ai] Cloud model: the text of escalated requests leaves this")
+            print("[ai] machine. Audio never does. ./run.sh --setup to change.")
+
         voice = tts.load_voice()
+
+        if self.with_ui:
+            self.ui = ui_mod.UiServer(on_command=self._ui_queue.put)
+            url = self.ui.start()
+            print(f"[ui] Open {url}")
+            self.ui.add_message("system", f"Connected. AI: {provider.describe(cfg)}")
+            threading.Thread(target=self._ui_worker, daemon=True).start()
 
         if self.text_only:
             self.speech = tts.Speech(voice, speaker=None)
             self.transcriber = None
             print("[mode] Text-only. Type commands; no mic, no speaker.")
+            return
+
+        if self.no_audio:
+            self.speech = tts.Speech(voice, speaker=None)
+            self.transcriber = None
+            print("[mode] No audio. Drive it from the UI.")
             return
 
         self.vad = vad_mod.load_vad()
@@ -89,11 +133,29 @@ class Assistant:
         self.speech = tts.Speech(voice, self.speaker)
 
     # ------------------------------------------------------------------
+    # ui plumbing
+    # ------------------------------------------------------------------
+    def _ui_worker(self) -> None:
+        """Typed commands from the browser, handled on our own thread."""
+        while self.running:
+            try:
+                text = self._ui_queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            self.handle(text)
+            self._await_speech()
+
+    def _ui_message(self, role: str, text: str) -> None:
+        if self.ui is not None:
+            self.ui.add_message(role, text)
+
+    # ------------------------------------------------------------------
     # speaking (worker thread) + barge-in
     # ------------------------------------------------------------------
     def _speak_async(self, text: str) -> None:
         STATE.set_activity(Activity.SPEAKING, text[:60])
         STATE.last_reply = text
+        self._ui_message("agent", text)
 
         def worker() -> None:
             completed = self.speech.speak(text)
@@ -127,46 +189,60 @@ class Assistant:
         sys.stdout.write(f"\r  ... {text[:70]:<72}")
         sys.stdout.flush()
 
+    def _escalate(self, text: str) -> Optional[str]:
+        """Ask the model. Returns a reply, or None meaning 'refuse'."""
+        if self.escalator is None or not self.escalator.enabled:
+            return None
+        STATE.set_activity(Activity.THINKING, "Thinking...")
+        return self.escalator.answer(text)
+
     def handle(self, text: str) -> None:
         text = (text or "").strip()
         if not text:
             return
 
-        print(f"\n  > {text}")
-        log_event("heard", text=text)
-        STATE.set_activity(Activity.THINKING, "Matching command...")
+        with self._handle_lock:
+            print(f"\n  > {text}")
+            self._ui_message("you", text)
+            log_event("heard", text=text)
+            STATE.set_activity(Activity.THINKING, "Matching command...")
 
-        clock = timer("route")
-        intent = rules.match(text)
-        clock.stop(intent=intent.name if intent else None)
+            clock = timer("route")
+            intent = rules.match(text)
+            clock.stop(intent=intent.name if intent else None)
 
-        # ---- CONTROL: never gated, never routed to a model ------------
-        if rules.is_control(intent):
-            self._handle_control(intent)
-            return
+            # ---- CONTROL: never gated, never routed to a model --------
+            if rules.is_control(intent):
+                self._handle_control(intent)
+                return
 
-        if intent is None:
-            # Reject by default (spec 4.6). Phase 4 escalates here instead.
-            log_event("refused", text=text, reason="no_rule_match")
-            self._speak_async(config.REFUSAL_LINE)
-            return
+            if intent is None:
+                # Rules failed. Give the model one chance to ANSWER -- it can
+                # never act. If it declines, we refuse, exactly as in Phase 1.
+                reply = self._escalate(text)
+                if reply is None:
+                    log_event("refused", text=text, reason="no_rule_match")
+                    self._speak_async(config.REFUSAL_LINE)
+                else:
+                    self._speak_async(reply)
+                return
 
-        handler = self.dispatch.get(intent.name)
-        if handler is None:
-            log_event("refused", text=text, reason="no_handler",
-                      intent=intent.name)
-            self._speak_async(config.REFUSAL_LINE)
-            return
+            handler = self.dispatch.get(intent.name)
+            if handler is None:
+                log_event("refused", text=text, reason="no_handler",
+                          intent=intent.name)
+                self._speak_async(config.REFUSAL_LINE)
+                return
 
-        STATE.set_activity(Activity.ACTING, intent.name)
-        log_event("intent", name=intent.name, slots=intent.slots,
-                  risk=intent.risk)
-        try:
-            reply = handler(intent)
-        except Exception as exc:
-            log_event("action_error", intent=intent.name, error=str(exc)[:200])
-            reply = "That didn't work."
-        self._speak_async(reply)
+            STATE.set_activity(Activity.ACTING, intent.name)
+            log_event("intent", name=intent.name, slots=intent.slots,
+                      risk=intent.risk)
+            try:
+                reply = handler(intent)
+            except Exception as exc:
+                log_event("action_error", intent=intent.name, error=str(exc)[:200])
+                reply = "That didn't work."
+            self._speak_async(reply)
 
     def _handle_control(self, intent: rules.Intent) -> None:
         name = intent.name
@@ -177,6 +253,7 @@ class Assistant:
             self.timers.cancel(silent=True)
             STATE.set_activity(Activity.IDLE)
             print("  [stopped]")
+            self._ui_message("system", "stopped")
             return
 
         if name == "mode.manual":
@@ -210,6 +287,12 @@ class Assistant:
                 break
             self.handle(line)
             self._await_speech()
+
+    def run_idle(self) -> None:
+        """No mic, no stdin -- just the UI. Used by --ui --no-audio."""
+        print("\n[ready] UI only. Ctrl-C to quit.\n")
+        while self.running:
+            time.sleep(0.5)
 
     def run_voice(self) -> None:
         buffer: list[np.ndarray] = []
@@ -290,6 +373,8 @@ class Assistant:
     def run(self) -> None:
         if self.text_only:
             self.run_text()
+        elif self.mic is None:
+            self.run_idle()
         else:
             self.run_voice()
 
@@ -303,6 +388,8 @@ class Assistant:
                 self.mic.stop()
             if self.speaker is not None:
                 self.speaker.close()
+            if self.ui is not None:
+                self.ui.stop()
         finally:
             log_event("shutdown")
 
@@ -311,12 +398,37 @@ class Assistant:
 # entry point
 # ----------------------------------------------------------------------
 
+def _check_ai() -> int:
+    """Verify the configured provider actually answers."""
+    cfg = provider.resolve(interactive=True)
+    print(f"\nProvider: {provider.describe(cfg)}")
+    if cfg.get("provider") in ("none", "", None):
+        print("Nothing to check -- rules only.\n")
+        return 0
+    client = llm.LlmClient(cfg["base_url"], cfg.get("api_key", ""), cfg["model"])
+    print(f"Calling {cfg['base_url']} ...")
+    ok, detail = client.ping()
+    print(("  OK: " if ok else "  FAILED: ") + detail + "\n")
+    if not ok and cfg["provider"] == "ollama":
+        print("Is Ollama running?  ollama serve")
+        print(f"Is the model pulled?  ollama pull {cfg['model']}\n")
+    return 0 if ok else 1
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Ambient assistant -- Phase 1 voice loop"
+        description="Ambient assistant -- voice loop, rules, AI escalation, UI"
     )
     parser.add_argument("--text", action="store_true",
                         help="type commands instead of speaking (no audio needed)")
+    parser.add_argument("--ui", action="store_true",
+                        help="serve the local web UI at http://127.0.0.1:8765")
+    parser.add_argument("--no-audio", action="store_true",
+                        help="skip the mic entirely; drive it from the UI only")
+    parser.add_argument("--setup", action="store_true",
+                        help="choose the AI provider (Groq API or local Ollama)")
+    parser.add_argument("--check-ai", action="store_true",
+                        help="send one test request to the configured provider")
     parser.add_argument("--devices", action="store_true",
                         help="list audio devices and exit")
     parser.add_argument("--say", metavar="TEXT",
@@ -327,7 +439,19 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(list_devices())
         return 0
 
-    assistant = Assistant(text_only=args.text)
+    if args.setup:
+        provider.wizard()
+        return 0
+
+    if args.check_ai:
+        return _check_ai()
+
+    text_only = args.text or (args.no_audio and not args.ui)
+    assistant = Assistant(
+        text_only=text_only,
+        with_ui=args.ui,
+        no_audio=args.no_audio and not text_only,
+    )
     assistant.load()
 
     if args.say:

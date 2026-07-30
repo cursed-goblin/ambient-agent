@@ -30,3 +30,7 @@ piper-tts>=1.2.0
 
 # --- dev -------------------------------------------------------------
 pytest>=8.0
+
+# Optional: a real desktop window for the UI instead of a browser tab.
+# Falls back to the default browser, then to printing the URL.
+pywebview>=5.0

@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ambient</title>
+<style>
+:root{--bg:#0d0f12;--panel:#15181d;--line:#23272e;--text:#e6e8ea;--dim:#8b929c;
+--you:#1e2530;--accent:#4c8dff;--warn:#ffb84c;--bad:#ff6b6b;--good:#4ade80;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);height:100vh;display:flex;
+flex-direction:column;font:15px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif}
+header{display:flex;align-items:center;gap:10px;padding:10px 16px;flex-shrink:0;
+border-bottom:1px solid var(--line);background:var(--panel)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--dim);flex:none}
+.dot.listening{background:var(--accent);animation:p 1s infinite}
+.dot.thinking{background:var(--warn);animation:p 1.4s infinite}
+.dot.speaking{background:var(--good);animation:p .8s infinite}
+.dot.acting{background:var(--good)}
+@keyframes p{50%{opacity:.2}}
+h1{font-size:15px;font-weight:600;margin:0}
+.badge{border:1px solid var(--line);border-radius:999px;padding:2px 9px;
+font-size:12px;color:var(--dim);white-space:nowrap}
+.badge.on{color:var(--good);border-color:var(--good)}
+.spacer{flex:1}
+.ico{background:none;border:1px solid var(--line);border-radius:8px;color:var(--dim);
+padding:6px 10px;font-size:17px;cursor:pointer}
+.ico:hover,.ico.active{border-color:var(--accent);color:var(--accent)}
+#banner{display:none;padding:8px 16px;font-size:13px;background:#1d1a12;
+color:var(--warn);border-bottom:1px solid var(--line)}
+main{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:70ch;padding:9px 13px;border-radius:12px;white-space:pre-wrap;
+word-wrap:break-word}
+.msg.you{background:var(--you);align-self:flex-end}
+.msg.agent{background:var(--panel);border:1px solid var(--line)}
+.msg.system{color:var(--dim);font-size:13px;align-self:center;text-align:center}
+.role{font-size:11px;color:var(--dim);margin-bottom:3px;letter-spacing:.04em}
+#partial{color:var(--accent);font-style:italic;min-height:22px;padding:0 16px 6px;
+font-size:14px}
+footer{padding:12px 16px;border-top:1px solid var(--line);background:var(--panel);
+flex-shrink:0}
+form{display:flex;gap:8px}
+input[type=text]{flex:1;background:var(--bg);color:var(--text);font:inherit;
+border:1px solid var(--line);border-radius:9px;padding:10px 13px;outline:none}
+input[type=text]:focus{border-color:var(--accent)}
+.send{background:var(--accent);color:#fff;border:0;border-radius:9px;padding:10px 18px;
+font:inherit;font-weight:600;cursor:pointer}
+.mic{background:none;border:1px solid var(--line);border-radius:9px;color:var(--dim);
+padding:10px 14px;font-size:17px;cursor:pointer}
+.mic.rec{border-color:var(--bad);color:var(--bad);animation:p .8s infinite}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;
+align-items:center;justify-content:center;padding:16px}
+.overlay.open{display:flex}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+padding:24px;width:100%;max-width:440px;max-height:88vh;overflow-y:auto}
+.card h2{margin:0 0 6px;font-size:17px}
+.card p.sub{color:var(--dim);font-size:13px;margin:0 0 18px}
+.field{margin-bottom:14px}
+label{display:block;font-size:12px;color:var(--dim);margin-bottom:5px}
+select,input.f{width:100%;background:var(--bg);color:var(--text);font:inherit;
+border:1px solid var(--line);border-radius:8px;padding:9px 12px;outline:none}
+select:focus,input.f:focus{border-color:var(--accent)}
+.row{display:flex;gap:8px;align-items:center}
+.btn{background:var(--accent);color:#fff;border:0;border-radius:9px;padding:11px 20px;
+font:inherit;font-weight:600;cursor:pointer}
+.btn.wide{width:100%;font-size:15px}
+.btn:disabled{opacity:.5;cursor:default}
+.btn2{background:none;border:1px solid var(--line);color:var(--dim);border-radius:9px;
+padding:11px 16px;font:inherit;cursor:pointer}
+.status{font-size:13px;margin-top:10px;min-height:18px;color:var(--warn)}
+.skip{display:block;text-align:center;margin-top:12px;font-size:13px;color:var(--dim);
+cursor:pointer;text-decoration:underline}
+input[type=range]{flex:1;accent-color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <div class="dot" id="dot"></div>
+  <h1>Ambient</h1>
+  <span class="badge" id="mode-badge">ambient</span>
+  <span class="badge" id="ai-badge">no AI</span>
+  <span class="spacer"></span>
+  <button class="ico" id="tts-toggle" title="Speak replies aloud">&#128264;</button>
+  <button class="ico" id="gear-btn" title="Settings">&#9881;</button>
+</header>
+<div id="banner"></div>
+<main id="log"></main>
+<div id="partial"></div>
+<footer>
+  <form id="form">
+    <input type="text" id="input" placeholder="Say or type anything..." autocomplete="off" autofocus>
+    <button type="button" class="mic" id="mic-btn" title="Tap to speak">&#127908;</button>
+    <button type="submit" class="send">Send</button>
+  </form>
+</footer>
+
+<div class="overlay" id="settings-overlay">
+  <div class="card">
+    <h2>Settings</h2>
+    <p class="sub">The AI understands your commands and calls tools itself.</p>
+    <div class="field">
+      <label>AI provider</label>
+      <select id="s-provider">
+        <option value="none">None (offline)</option>
+        <option value="groq">Groq - fast, free</option>
+        <option value="ollama">Ollama - local, private</option>
+        <option value="custom">Custom OpenAI-compatible</option>
+      </select>
+    </div>
+    <div class="field" id="f-key">
+      <label>API key</label>
+      <input type="password" class="f" id="s-key" placeholder="gsk_..." autocomplete="off">
+    </div>
+    <div class="field" id="f-url">
+      <label>Base URL</label>
+      <input type="text" class="f" id="s-url" placeholder="https://api.groq.com/openai/v1">
+    </div>
+    <div class="field" id="f-model">
+      <label>Model</label>
+      <input type="text" class="f" id="s-model" placeholder="llama-3.3-70b-versatile">
+    </div>
+    <div class="field">
+      <label>Reply volume (browser voice)</label>
+      <div class="row">
+        <input type="range" id="s-vol" min="0" max="1" step="0.05" value="1">
+        <button class="btn2" id="test-tts">Test</button>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn" id="s-save">Save &amp; connect</button>
+      <button class="btn2" id="s-close">Close</button>
+    </div>
+    <div class="status" id="s-status"></div>
+  </div>
+</div>
+
+<div class="overlay" id="wizard-overlay">
+  <div class="card">
+    <h2>Welcome to Ambient</h2>
+    <p class="sub">Paste a Groq API key and the assistant will understand plain
+    speech and control your machine on its own. Free key at console.groq.com</p>
+    <div class="field">
+      <label>Groq API key</label>
+      <input type="password" class="f" id="wiz-key" placeholder="gsk_..." autocomplete="off">
+    </div>
+    <button class="btn wide" id="wiz-connect">Connect</button>
+    <div class="status" id="wiz-status"></div>
+    <span class="skip" id="wiz-skip">Skip for now</span>
+  </div>
+</div>
+
+<script>
+var $ = function(i){return document.getElementById(i);};
+var log = $('log');
+var ttsOn = true, ttsVol = 1, synth = window.speechSynthesis;
+var GU='https://api.groq.com/openai/v1', OU='http://localhost:11434/v1';
+var GM='llama-3.3-70b-versatile', OM='llama3';
+
+function atBottom(){return log.scrollHeight-log.scrollTop-log.clientHeight<80;}
+function speak(t){
+  if(!synth||!ttsOn||!t) return;
+  synth.cancel();
+  var u=new SpeechSynthesisUtterance(t);
+  u.volume=ttsVol; u.rate=1.05;
+  synth.speak(u);
+}
+function addMsg(role,text){
+  var stick=atBottom();
+  var w=document.createElement('div');
+  w.className='msg '+role;
+  if(role!=='system'){
+    var r=document.createElement('div');
+    r.className='role';
+    r.textContent=(role==='you')?'YOU':'AMBIENT';
+    w.appendChild(r);
+  }
+  var b=document.createElement('div');
+  b.textContent=text;
+  w.appendChild(b);
+  log.appendChild(w);
+  if(stick) log.scrollTop=log.scrollHeight;
+  if(role==='agent') speak(text);
+}
+function applyState(s){
+  $('dot').className='dot '+(s.activity||'');
+  $('mode-badge').textContent=s.mode||'ambient';
+  $('partial').textContent=s.partial?('hearing: '+s.partial):'';
+}
+var banner=$('banner');
+var es=new EventSource('/events');
+es.onmessage=function(ev){
+  var m=JSON.parse(ev.data);
+  if(m.type==='state') applyState(m.state);
+  else if(m.type==='message') addMsg(m.message.role,m.message.text);
+  else if(m.type==='ai_status'){
+    $('ai-badge').textContent=m.label||'no AI';
+    $('ai-badge').className='badge'+((m.label&&m.label!=='no AI')?' on':'');
+  }
+  else if(m.type==='banner'){
+    banner.textContent=m.text||'';
+    banner.style.display=m.text?'block':'none';
+  }
+};
+es.onerror=function(){
+  banner.textContent='Disconnected - is the agent still running?';
+  banner.style.display='block';
+};
+function sendText(t){
+  if(!t) return;
+  $('input').value='';
+  fetch('/command',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({text:t})}).catch(function(){
+      addMsg('system','Could not reach the agent.');
+    });
+}
+$('form').addEventListener('submit',function(e){
+  e.preventDefault();
+  sendText($('input').value.trim());
+});
+
+// --- microphone (browser speech recognition) ---------------------------
+var micBtn=$('mic-btn');
+var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(!SR){ micBtn.disabled=true; micBtn.title='Voice input not supported here'; }
+else{
+  var rec=new SR();
+  rec.lang='en-US'; rec.interimResults=false; rec.maxAlternatives=1;
+  rec.onresult=function(e){
+    var t=e.results[0][0].transcript;
+    $('input').value=t;
+    sendText(t);
+  };
+  rec.onend=function(){micBtn.classList.remove('rec');};
+  rec.onerror=function(){micBtn.classList.remove('rec');};
+  micBtn.addEventListener('click',function(){
+    if(micBtn.classList.contains('rec')){ rec.stop(); }
+    else{ micBtn.classList.add('rec'); try{rec.start();}catch(x){} }
+  });
+}
+
+// --- voice toggle -------------------------------------------------------
+$('tts-toggle').classList.add('active');
+$('tts-toggle').addEventListener('click',function(){
+  ttsOn=!ttsOn;
+  $('tts-toggle').classList.toggle('active',ttsOn);
+  if(!ttsOn&&synth) synth.cancel();
+});
+
+// --- settings -----------------------------------------------------------
+var sOverlay=$('settings-overlay');
+function updFields(){
+  var p=$('s-provider').value;
+  var show=function(id,on){$(id).style.display=on?'':'none';};
+  if(p==='groq'){ $('s-url').value=GU; if(!$('s-model').value)$('s-model').value=GM; }
+  if(p==='ollama'){ if(!$('s-url').value)$('s-url').value=OU;
+                    if(!$('s-model').value)$('s-model').value=OM; }
+  show('f-key', p==='groq'||p==='custom');
+  show('f-url', p==='ollama'||p==='custom');
+  show('f-model', p!=='none');
+}
+$('s-provider').addEventListener('change',updFields);
+$('s-vol').addEventListener('input',function(e){ttsVol=parseFloat(e.target.value);});
+$('test-tts').addEventListener('click',function(){
+  var was=ttsOn; ttsOn=true; speak('Ambient is ready.'); ttsOn=was;
+});
+$('gear-btn').addEventListener('click',function(){openSettings();});
+$('s-close').addEventListener('click',function(){sOverlay.classList.remove('open');});
+sOverlay.addEventListener('click',function(e){
+  if(e.target===sOverlay) sOverlay.classList.remove('open');
+});
+function openSettings(){
+  fetch('/api/config').then(function(r){return r.json();}).then(function(c){
+    var p=c.provider||'none';
+    $('s-provider').value=(p==='groq'||p==='ollama'||p==='none')?p:'custom';
+    $('s-url').value=c.base_url||'';
+    $('s-model').value=c.model||'';
+    $('s-key').value='';
+    $('s-key').placeholder=c.has_key?'(saved - leave blank to keep)':'gsk_...';
+    updFields();
+  }).catch(function(){updFields();});
+  $('s-status').textContent='';
+  sOverlay.classList.add('open');
+}
+$('s-save').addEventListener('click',function(){
+  var p=$('s-provider').value;
+  var url=$('s-url').value.trim();
+  if(p==='groq') url=GU;
+  if(p==='ollama'&&!url) url=OU;
+  var body={provider:p,api_key:$('s-key').value.trim(),base_url:url,
+            model:$('s-model').value.trim()};
+  $('s-save').disabled=true;
+  $('s-status').style.color='var(--warn)';
+  $('s-status').textContent='Testing connection...';
+  fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      $('s-status').style.color=d.ok?'var(--good)':'var(--bad)';
+      $('s-status').textContent=d.ok?'Connected!':(d.error||'Failed');
+      if(d.ok) setTimeout(function(){sOverlay.classList.remove('open');},900);
+    })
+    .catch(function(e){
+      $('s-status').style.color='var(--bad)';
+      $('s-status').textContent='Error: '+e.message;
+    })
+    .then(function(){$('s-save').disabled=false;});
+});
+
+// --- first-run wizard ---------------------------------------------------
+var wiz=$('wizard-overlay');
+fetch('/api/config').then(function(r){return r.json();}).then(function(c){
+  if(!c.provider||c.provider==='none') wiz.classList.add('open');
+  else{
+    $('ai-badge').textContent=c.provider;
+    $('ai-badge').className='badge on';
+  }
+}).catch(function(){});
+$('wiz-skip').addEventListener('click',function(){wiz.classList.remove('open');});
+$('wiz-connect').addEventListener('click',function(){
+  var k=$('wiz-key').value.trim();
+  if(!k){ $('wiz-status').textContent='Paste a key first.'; return; }
+  $('wiz-connect').disabled=true;
+  $('wiz-status').style.color='var(--warn)';
+  $('wiz-status').textContent='Connecting...';
+  fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({provider:'groq',api_key:k,base_url:GU,model:GM})})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d.ok){
+        wiz.classList.remove('open');
+        $('ai-badge').textContent='groq';
+        $('ai-badge').className='badge on';
+        addMsg('system','Connected. Just say what you want.');
+      }else{
+        $('wiz-status').style.color='var(--bad)';
+        $('wiz-status').textContent=d.error||'Connection failed.';
+      }
+    })
+    .catch(function(e){
+      $('wiz-status').style.color='var(--bad)';
+      $('wiz-status').textContent='Error: '+e.message;
+    })
+    .then(function(){$('wiz-connect').disabled=false;});
+});
+</script>
+</body>
+</html>

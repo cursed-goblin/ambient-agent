@@ -1,0 +1,54 @@
+# A USER service, not a system one -- deliberately.
+#
+# The assistant controls the desktop: volume, brightness, windows, media. All
+# of that lives on the user's session bus, which a root service cannot reach.
+# The alternative is running a microphone-listening agent as root to work
+# around a permissions problem, which is a bad trade at any price.
+#
+# Install:
+#   ./install.sh --service
+# or by hand:
+#   mkdir -p ~/.config/systemd/user
+#   sed "s|@HOME@|$PWD|g" systemd/ambient-agent.service \
+#     > ~/.config/systemd/user/ambient-agent.service
+#   systemctl --user daemon-reload && systemctl --user enable --now ambient-agent
+
+[Unit]
+Description=Ambient voice assistant
+Documentation=https://github.com/cursed-goblin/ambient-agent
+# Needs the graphical session for audio and window control, so it follows it
+# rather than starting at boot.
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=@HOME@
+ExecStart=@HOME@/run.sh --ui
+
+# Safety mode ON by default. A voice agent that starts automatically at login
+# and can act on the machine should not do so until you have deliberately
+# turned this off in Settings.
+Environment=AMBIENT_DRY_RUN=1
+
+# Echo cancellation, so the assistant does not hear its own voice and answer
+# itself. setup_audio.sh creates this sink.
+Environment=AMBIENT_INPUT_DEVICE=echo_cancel
+Environment=AMBIENT_OUTPUT_DEVICE=echo_cancel
+
+Restart=on-failure
+RestartSec=5
+# If it fails five times in a row something is genuinely wrong. Stop, rather
+# than looping forever and filling the journal.
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ambient-agent
+
+[Install]
+WantedBy=default.target

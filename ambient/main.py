@@ -1,7 +1,7 @@
 """
 Orchestrator -- the ambient loop, the agent loop, and the local UI.
 
-    wake word -> AEC'd mic -> VAD -> Whisper -> agent loop -> Piper
+    wake word -> AEC'd mic -> VAD -> Whisper -> agent loop -> gate -> Piper
                                    ^                |
                                    |                +-- model picks tools
                                    +---- barge-in interrupt ------+
@@ -11,6 +11,16 @@ requests. The model reads what you said, chooses tools from tools.SCHEMAS, and
 calls them itself. Only "control" phrases (stop, go quiet, mode switches) are
 still matched deterministically, because those must work even when the network
 is down and must never wait on a model.
+
+Phase 4 change: nothing the model chooses reaches the machine directly. Every
+call goes through ambient.gate, which classifies it, refuses outright what it
+should never do, and stops destructive actions to ask out loud first. This file
+owns the *conversational* half of that: recognising a confirm or cancel phrase
+and handing it back to the gate.
+
+Why confirmation is matched here rather than by the model: an approval must not
+depend on a network round-trip or on the model's mood. It is a fixed phrase
+compared against a fixed list, and only when something is actually pending.
 
 While we are speaking, the main loop KEEPS READING MIC FRAMES and feeds them to
 a barge-in detector. Speaking happens on a worker thread. That is what makes
@@ -33,6 +43,7 @@ import config
 from ambient import (
     actions,
     agent as agent_mod,
+    gate as gate_mod,
     llm,
     tools as tools_mod,
     provider,
@@ -60,6 +71,9 @@ class Assistant:
         # --- brains that need no audio ---------------------------------
         self.timers = actions.TimerService(on_fire=self._announce)
         self.dispatch = actions.build_dispatch(self.timers)
+        # One gate for the whole process. It holds the pending-approval slot,
+        # so the agent loop and the confirm phrases must share this instance.
+        self.gate = gate_mod.Gate()
         self.agent_loop: Optional[agent_mod.AgentLoop] = None
         self._current_cfg: dict = {}
 
@@ -98,6 +112,15 @@ class Assistant:
         if self.agent_loop and self.agent_loop.client and not cfg.get("private"):
             print("[ai] Cloud model: command text leaves this machine.")
 
+        # Be loud about safety mode. Silently not doing things is worse than
+        # not doing them.
+        if self.gate.dry_run:
+            print("[safety] DRY RUN -- actions are logged, not performed.")
+            print("[safety] Turn it off in Settings, or AMBIENT_DRY_RUN=0")
+        if self.gate.confirm_everything:
+            print("[safety] Confirm-everything is on.")
+        print(f"[safety] Audit trail: {config.AUDIT_LOG}")
+
         voice = tts.load_voice()
 
         if self.with_ui:
@@ -109,6 +132,9 @@ class Assistant:
             url = self.ui.start()
             print(f"[ui] Open {url}")
             self.ui.add_message("system", f"Connected. AI: {provider.describe(cfg)}")
+            if self.gate.dry_run:
+                self.ui.set_banner(
+                    "Safety mode on: actions are logged, not performed.")
             threading.Thread(target=self._ui_worker, daemon=True).start()
 
         if self.text_only:
@@ -209,7 +235,9 @@ class Assistant:
                 api_key=cfg.get("api_key", ""),
                 model=cfg.get("model", ""),
             )
-        self.agent_loop = agent_mod.AgentLoop(client=client)
+        # Same gate instance across reloads, or a pending approval would be
+        # silently dropped when the provider changes.
+        self.agent_loop = agent_mod.AgentLoop(client=client, gate=self.gate)
         if announce:
             desc = provider.describe(cfg)
             print(f"[ai] provider reloaded: {desc}")
@@ -229,6 +257,25 @@ class Assistant:
             self._ui_message("you", text)
             log_event("heard", text=text)
             STATE.set_activity(Activity.THINKING, "Matching command...")
+
+            # ---- pending approval: confirm or cancel ------------------
+            # Only consulted when something is actually waiting, so "go
+            # ahead" is ordinary speech the rest of the time. Deliberately
+            # ahead of the model: an approval must never depend on a network
+            # call, and must never be inferred.
+            if self.gate.has_pending():
+                if gate_mod.is_cancel_phrase(text):
+                    self._speak_async(self.gate.cancel())
+                    return
+                if gate_mod.is_confirm_phrase(text):
+                    STATE.set_activity(Activity.THINKING, "Confirmed...")
+                    self._speak_async(str(self.gate.confirm()))
+                    return
+                # Anything else abandons the pending action rather than
+                # leaving it armed for the next stray "go ahead".
+                summary = self.gate.pending_summary()
+                self.gate.cancel()
+                log_event("gate_abandoned", summary=str(summary)[:120])
 
             clock = timer("route")
             intent = rules.match(text)
@@ -262,6 +309,9 @@ class Assistant:
         if name == "control.stop":
             self.speech.interrupt()
             self.timers.cancel(silent=True)
+            # A hard stop also disarms anything awaiting approval.
+            if self.gate.has_pending():
+                self.gate.cancel()
             STATE.set_activity(Activity.IDLE)
             print("  [stopped]")
             self._ui_message("system", "stopped")
@@ -395,6 +445,9 @@ class Assistant:
             if self.speech is not None:
                 self.speech.interrupt()
             self.timers.cancel(silent=True)
+            # Never leave an approval armed across a restart.
+            if self.gate.has_pending():
+                self.gate.cancel()
             if self.mic is not None:
                 self.mic.stop()
             if self.speaker is not None:
@@ -414,7 +467,7 @@ def _check_ai() -> int:
     cfg = provider.resolve(interactive=True)
     print(f"\nProvider: {provider.describe(cfg)}")
     if cfg.get("provider") in ("none", "", None):
-        print("Nothing to check -- rules only.\n")
+        print("Nothing to check -- no model configured.\n")
         return 0
     client = llm.LlmClient(cfg["base_url"], cfg.get("api_key", ""), cfg["model"])
     print(f"Calling {cfg['base_url']} ...")
@@ -423,7 +476,26 @@ def _check_ai() -> int:
     if not ok and cfg["provider"] == "ollama":
         print("Is Ollama running?  ollama serve")
         print(f"Is the model pulled?  ollama pull {cfg['model']}\n")
+    if not ok and "1010" in detail:
+        print("Error 1010 is the network refusing the connection, not a bad")
+        print("key. Mobile carriers and some VPNs trigger it. Try another")
+        print("network, or use the UI wizard which sends a browser-like")
+        print("request.\n")
     return 0 if ok else 1
+
+
+def _audit_tail(count: int = 20) -> int:
+    """Show what the assistant has actually been doing."""
+    path = config.AUDIT_LOG
+    if not path.exists():
+        print(f"No audit log yet at {path}")
+        return 0
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    print(f"\nLast {min(count, len(lines))} of {len(lines)} entries in {path}:\n")
+    for line in lines[-count:]:
+        print("  " + line)
+    print()
+    return 0
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -442,6 +514,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                         help="send one test request to the configured provider")
     parser.add_argument("--devices", action="store_true",
                         help="list audio devices and exit")
+    parser.add_argument("--audit", action="store_true",
+                        help="print the tail of the audit log and exit")
     parser.add_argument("--say", metavar="TEXT",
                         help="speak one line and exit (TTS smoke test)")
     args = parser.parse_args(argv)
@@ -449,6 +523,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.devices:
         print(list_devices())
         return 0
+
+    if args.audit:
+        return _audit_tail()
 
     if args.setup:
         provider.wizard()

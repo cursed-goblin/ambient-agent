@@ -57,6 +57,7 @@ class Assistant:
         self.timers = actions.TimerService(on_fire=self._announce)
         self.dispatch = actions.build_dispatch(self.timers)
         self.escalator: Optional[llm.Escalator] = None
+        self._current_cfg: dict = {}
 
         # --- audio stack ----------------------------------------------
         self.vad = None
@@ -84,21 +85,32 @@ class Assistant:
     def load(self, interactive_setup: bool = True) -> None:
         config.ensure_dirs()
 
-        # Which model handles what the rules cannot? Asked once, remembered.
-        cfg = provider.resolve(interactive=interactive_setup)
+        # Which model handles what the rules cannot?
+        # With --ui, skip the terminal wizard -- the browser handles setup.
+        cfg = provider.resolve(interactive=interactive_setup and not self.with_ui)
+        self._current_cfg = cfg
         self.escalator = llm.load_escalator(cfg)
         print(f"[ai] {provider.describe(cfg)}")
         if self.escalator.enabled and not cfg.get("private"):
             print("[ai] Cloud model: the text of escalated requests leaves this")
-            print("[ai] machine. Audio never does. ./run.sh --setup to change.")
+            print("[ai] machine. Audio never does.")
 
         voice = tts.load_voice()
 
         if self.with_ui:
-            self.ui = ui_mod.UiServer(on_command=self._ui_queue.put)
+            self.ui = ui_mod.UiServer(
+                on_command=self._ui_queue.put,
+                get_config=lambda: self._current_cfg,
+                on_config_change=self._on_ui_config_change,
+            )
             url = self.ui.start()
-            print(f"[ui] Open {url}")
-            self.ui.add_message("system", f"Connected. AI: {provider.describe(cfg)}")
+            print(f"[ui] Serving on {url}")
+            has_provider = cfg.get("provider") not in (None, "none", "")
+            if has_provider:
+                self.ui.add_message("system", f"Connected. AI: {provider.describe(cfg)}")
+            else:
+                self.ui.add_message("system",
+                    "Welcome! Use the setup wizard to connect a Groq API key or local Ollama.")
             threading.Thread(target=self._ui_worker, daemon=True).start()
 
         if self.text_only:
@@ -148,6 +160,15 @@ class Assistant:
     def _ui_message(self, role: str, text: str) -> None:
         if self.ui is not None:
             self.ui.add_message(role, text)
+
+    def _on_ui_config_change(self, cfg: dict) -> None:
+        """Hot-reload the escalator when the user saves new settings in the UI."""
+        self._current_cfg = cfg
+        self.escalator = llm.load_escalator(cfg)
+        desc = provider.describe(cfg)
+        print(f"[ai] provider reloaded: {desc}")
+        if self.ui:
+            self.ui.add_message("system", f"AI provider updated: {desc}")
 
     # ------------------------------------------------------------------
     # speaking (worker thread) + barge-in
@@ -217,8 +238,6 @@ class Assistant:
                 return
 
             if intent is None:
-                # Rules failed. Give the model one chance to ANSWER -- it can
-                # never act. If it declines, we refuse, exactly as in Phase 1.
                 reply = self._escalate(text)
                 if reply is None:
                     log_event("refused", text=text, reason="no_rule_match")
@@ -426,7 +445,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--no-audio", action="store_true",
                         help="skip the mic entirely; drive it from the UI only")
     parser.add_argument("--setup", action="store_true",
-                        help="choose the AI provider (Groq API or local Ollama)")
+                        help="choose the AI provider (Groq API or local Ollama) via terminal")
     parser.add_argument("--check-ai", action="store_true",
                         help="send one test request to the configured provider")
     parser.add_argument("--devices", action="store_true",

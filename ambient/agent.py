@@ -1,156 +1,190 @@
 """
-The agent loop.
+The agent loop -- the model decides, the gate permits, the tools act.
 
-This replaces regex intent matching. The flow is:
+This replaced the old regex intent table. There is no per-command code here.
+The model receives the user's words plus every schema in tools.SCHEMAS, picks
+what to call, and fills in the arguments itself. "open whatsapp" was never
+programmed; the model reads it and chooses open_app.
 
-    user text -> model (with tool schemas) -> model picks tool(s)
-              -> we execute -> results back to model -> model speaks
+What is still hard-coded, deliberately:
 
-We never decide what the user meant. The model does. Our job is only to
-execute safely and keep the loop bounded.
+- **Complexity caps** (spec 4.7), enforced in Python rather than asked for in
+  the prompt: at most 6 tool calls per task, at most 2 retries of the same
+  tool, and a wall-clock deadline. A model cannot talk its way past a while
+  loop counter.
+- **Every call goes through the gate.** This loop has no access to tools.execute
+  and never calls a shell. It can only ask ambient.gate.Gate.
+- **Approval short-circuits the loop.** If the gate wants a human, we stop
+  immediately and return the spoken summary. We do not continue reasoning as
+  though the action succeeded, which is the classic way agents end up lying.
 """
 
 from __future__ import annotations
 
 import json
-from typing import Callable, Optional
+import time
+from typing import Optional
 
-from ambient import llm, tools
+import config
+from ambient import gate as gate_mod
+from ambient import tools as tools_mod
+from ambient.llm import LlmError
+from ambient.state import log_event
 
-MAX_TOOL_CALLS = 6
+MAX_TOOL_CALLS = int(getattr(config, "MAX_TOOL_CALLS", 6))
+MAX_RETRIES_PER_TOOL = 2
+TASK_TIMEOUT_S = float(getattr(config, "TASK_TIMEOUT_S", 90))
 
-SYSTEM_PROMPT = """You are Ambient, a hands-free assistant running on the \
-user's own Linux computer.
+SYSTEM_PROMPT = """You are a hands-free voice assistant running on the user's \
+Linux computer. Your reply is read aloud by a speech synthesiser.
 
-You control the machine by calling tools. When the user asks for something you \
-have a tool for, CALL THE TOOL -- do not describe how to do it, do not ask for \
-confirmation, just do it. You may call several tools in a row if a request \
-needs it.
+You have tools. Use them. When the user asks for something a tool can do, call \
+the tool -- do not describe how to do it and do not ask permission first, the \
+system handles permission itself.
 
-Interpret natural, messy speech generously. Transcription is imperfect, so \
-infer intent from context:
-  "whatsapp buddy"        -> open_app("whatsapp")
-  "timer check"           -> get_timer_remaining()
-  "make it louder"        -> step_volume("up")
-  "too bright"            -> step_brightness("down")
-  "quarter hour timer"    -> start_timer(900)
+How to behave:
+- Work out the arguments yourself. "ten minutes" is 600 seconds. "turn it down \
+a bit" is step_volume down by about 10. "open whatsapp" is open_app with the \
+name whatsapp.
+- Every tool call needs a short `reason`. Write it in plain English; the user \
+may see it.
+- Use get_info rather than guessing the time, date or battery level. You do \
+not know them.
+- After a tool runs, tell the user what happened in one short sentence, based \
+only on what the tool actually returned.
+- If a tool returns an error, say so plainly. Never claim something worked \
+when it did not.
+- If a tool result starts with "[dry run]", safety mode is on. Tell the user \
+it was not actually applied.
+- If no tool fits, just answer conversationally in one or two sentences. If \
+you genuinely cannot help, say so.
 
-Convert spoken durations to seconds yourself ("ten minutes" -> 600).
-
-If no tool fits, just answer conversationally -- you are also a normal \
-assistant and can chat, do arithmetic, and answer questions.
-
-You are speaking out loud. Replies must be ONE short sentence, plain spoken \
-English, no markdown, no lists, no emoji. Confirm what you did, briefly.
-"""
-
-# Substrings we refuse to let the model push into a shell, no matter what.
-_DANGER = [
-    "rm -rf", "dd if=", "mkfs", "> /dev", "shutdown", "reboot",
-    "chmod -R 777", "curl | sh", "wget | sh", "fork bomb", ":(){ :|:",
-    "/etc/passwd", "/etc/shadow",
-]
+Style: spoken English, short, no markdown, no lists, no emoji, no stage \
+directions. One or two sentences unless asked for detail."""
 
 
-def _is_safe(arguments: dict) -> bool:
-    blob = json.dumps(arguments or {}).lower()
-    return not any(bad in blob for bad in _DANGER)
+def _model_error(exc: Exception) -> str:
+    """Turn a transport failure into something worth hearing out loud."""
+    text = str(exc).lower()
+    if "401" in text or "invalid api key" in text:
+        return "My API key was rejected. Check it in Settings."
+    if "1010" in text or "403" in text:
+        return ("The AI provider refused the connection. "
+                "This is usually the network blocking it, not the key.")
+    if "429" in text or "rate limit" in text:
+        return "I'm being rate limited. Try again in a moment."
+    if "cannot reach" in text or "timed out" in text or "timeout" in text:
+        return "I can't reach the AI model right now."
+    return "The AI model failed to respond."
 
 
 class AgentLoop:
-    """Owns one conversation with the model."""
-
-    def __init__(self, client: Optional[llm.LlmClient],
-                 speak_callback: Optional[Callable[[str], None]] = None,
-                 history_turns: int = 6) -> None:
+    def __init__(self, client=None, gate=None, history_turns: int = 6) -> None:
         self.client = client
-        self.speak_callback = speak_callback
+        self.gate = gate if gate is not None else gate_mod.Gate()
         self.history_turns = history_turns
-        self.history: list[dict] = []
+        self._history: list[dict] = []
 
-    # ------------------------------------------------------------------
+    # -- history --------------------------------------------------------
+    def _remember(self, role: str, content: str) -> None:
+        self._history.append({"role": role, "content": content})
+        keep = self.history_turns * 2
+        if len(self._history) > keep:
+            del self._history[:-keep]
+
+    def reset(self) -> None:
+        self._history.clear()
+
+    # -- main -----------------------------------------------------------
     def handle(self, text: str) -> str:
         text = (text or "").strip()
         if not text:
             return ""
-        if self.client is None:
-            return self._offline_fallback(text)
 
+        if self.client is None:
+            return ("No AI model is connected yet. "
+                    "Open Settings and add a Groq API key.")
+
+        deadline = time.monotonic() + TASK_TIMEOUT_S
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-        messages.extend(self.history[-self.history_turns * 2:])
+        messages.extend(self._history)
         messages.append({"role": "user", "content": text})
 
-        used_a_tool = False
+        failures: dict[str, int] = {}
+        calls_made = 0
 
-        for _ in range(MAX_TOOL_CALLS):
+        while calls_made < MAX_TOOL_CALLS:
+            if time.monotonic() > deadline:
+                log_event("agent_timeout", text=text[:120])
+                return ("That took longer than I allow myself. "
+                        "I've stopped where I got to.")
+
             try:
-                reply = self.client.chat_with_tools(messages, tools.SCHEMAS)
-            except llm.LlmError as exc:
-                return self._model_error(exc)
+                reply = self.client.chat_with_tools(messages, tools_mod.SCHEMAS)
+            except LlmError as exc:
+                log_event("agent_llm_error", error=str(exc)[:300])
+                return _model_error(exc)
+            except Exception as exc:
+                log_event("agent_llm_crash", error=str(exc)[:300])
+                return _model_error(exc)
 
-            calls = reply.get("tool_calls") or []
+            tool_calls = reply.get("tool_calls") or []
             content = (reply.get("content") or "").strip()
 
-            if not calls:
-                final = content or ("Done." if used_a_tool else
-                                    "I didn't catch that.")
-                self._remember(text, final)
-                return final
+            # No tools wanted: this is the spoken answer.
+            if not tool_calls:
+                if not content:
+                    return "I'm not sure what to do with that."
+                self._remember("user", text)
+                self._remember("assistant", content)
+                return content
 
-            # Record the assistant's tool-call turn verbatim.
             messages.append({
                 "role": "assistant",
-                "content": content or None,
-                "tool_calls": calls,
+                "content": reply.get("content"),
+                "tool_calls": tool_calls,
             })
 
-            for call in calls:
-                used_a_tool = True
-                fn = call.get("function", {})
-                name = fn.get("name", "")
-                raw = fn.get("arguments") or "{}"
-                try:
-                    args = json.loads(raw) if isinstance(raw, str) else raw
-                except json.JSONDecodeError:
-                    args = {}
+            for call in tool_calls:
+                calls_made += 1
+                function = (call.get("function") or {})
+                name = function.get("name") or ""
+                raw_args = function.get("arguments") or "{}"
 
-                if not _is_safe(args):
-                    result = "error: refused for safety"
+                if isinstance(raw_args, str):
+                    try:
+                        arguments = json.loads(raw_args)
+                    except ValueError:
+                        arguments = {}
                 else:
-                    result = tools.execute(name, args)
+                    arguments = dict(raw_args)
+
+                reason = str(arguments.get("reason") or "")
+                log_event("agent_tool_call", tool=name, reason=reason[:120])
+
+                # Everything funnels through the gate. Always.
+                result = self.gate.run(name, arguments, reason)
+
+                # The gate wants a human. Stop the loop; do not pretend.
+                if self.gate.has_pending():
+                    return result
+
+                lowered = str(result).lower()
+                if "failed" in lowered or "couldn't" in lowered:
+                    failures[name] = failures.get(name, 0) + 1
 
                 messages.append({
                     "role": "tool",
-                    "tool_call_id": call.get("id", name),
+                    "tool_call_id": call.get("id") or name,
                     "name": name,
                     "content": str(result),
                 })
 
-        final = "That took too many steps."
-        self._remember(text, final)
-        return final
+                if failures.get(name, 0) >= MAX_RETRIES_PER_TOOL:
+                    log_event("agent_tool_giving_up", tool=name)
+                    return (f"I tried {name.replace('_', ' ')} twice and it "
+                            "kept failing, so I've stopped.")
 
-    # ------------------------------------------------------------------
-    def _remember(self, user_text: str, reply: str) -> None:
-        self.history.append({"role": "user", "content": user_text})
-        self.history.append({"role": "assistant", "content": reply})
-        self.history = self.history[-self.history_turns * 2:]
-
-    def _model_error(self, exc: Exception) -> str:
-        detail = str(exc)
-        if "401" in detail or "invalid_api_key" in detail:
-            return "My API key was rejected. Check it in Settings."
-        if "403" in detail or "1010" in detail:
-            return "The AI provider blocked the request. Try another network."
-        if "429" in detail:
-            return "Rate limited. Give it a moment."
-        if "cannot reach" in detail:
-            return "I can't reach the AI provider. Check your connection."
-        return "The AI request failed."
-
-    def _offline_fallback(self, text: str) -> str:
-        return ("No AI model is connected, so I can't understand that yet. "
-                "Open Settings and add a Groq API key.")
-
-    def reset(self) -> None:
-        self.history.clear()
+        log_event("agent_cap_reached", text=text[:120])
+        return ("This is more complex than I can handle in one go. "
+                "Try asking for one thing at a time.")

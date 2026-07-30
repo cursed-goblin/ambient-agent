@@ -17,6 +17,8 @@ What is still hard-coded, deliberately:
 - **Approval short-circuits the loop.** If the gate wants a human, we stop
   immediately and return the spoken summary. We do not continue reasoning as
   though the action succeeded, which is the classic way agents end up lying.
+- **Dry-run results are returned verbatim.** The model does not get to
+  paraphrase them. See _DRY_PREFIX below for why.
 """
 
 from __future__ import annotations
@@ -34,6 +36,9 @@ from ambient.state import log_event
 MAX_TOOL_CALLS = int(getattr(config, "MAX_TOOL_CALLS", 6))
 MAX_RETRIES_PER_TOOL = 2
 TASK_TIMEOUT_S = float(getattr(config, "TASK_TIMEOUT_S", 90))
+
+# Marker the gate puts in front of anything it declined to actually perform.
+_DRY_PREFIX = "[dry run]"
 
 SYSTEM_PROMPT = """You are a hands-free voice assistant running on the user's \
 Linux computer. Your reply is read aloud by a speech synthesiser.
@@ -54,10 +59,17 @@ not know them.
 only on what the tool actually returned.
 - If a tool returns an error, say so plainly. Never claim something worked \
 when it did not.
-- If a tool result starts with "[dry run]", safety mode is on. Tell the user \
-it was not actually applied.
-- If no tool fits, just answer conversationally in one or two sentences. If \
-you genuinely cannot help, say so.
+
+Never substitute one tool for another. Your tools do exactly what their \
+descriptions say and nothing more. If the user asks for something none of your \
+tools can do, say plainly that you cannot do it yet -- do not call the nearest \
+plausible tool and describe its result as if it achieved what was asked.
+
+In particular you have NO tools for files or folders, no shell or terminal \
+access, no way to install software, and no way to read or send messages. \
+Opening an application is not the same as doing something inside it. If asked \
+to create a folder, delete a file, run a command or send a message, say that \
+is not something you can do.
 
 Style: spoken English, short, no markdown, no lists, no emoji, no stage \
 directions. One or two sentences unless asked for detail."""
@@ -112,6 +124,7 @@ class AgentLoop:
 
         failures: dict[str, int] = {}
         calls_made = 0
+        dry_results: list[str] = []
 
         while calls_made < MAX_TOOL_CALLS:
             if time.monotonic() > deadline:
@@ -169,7 +182,18 @@ class AgentLoop:
                 if self.gate.has_pending():
                     return result
 
-                lowered = str(result).lower()
+                result_text = str(result)
+
+                # Nothing actually happened. Keep the model away from it:
+                # given a dry-run result and a request it could not fulfil, a
+                # model will write a confident past-tense sentence over the
+                # top of both. Observed in the wild -- "create a folder abhi"
+                # came back as "Settings was opened to create a new folder"
+                # when no folder existed and Settings had not even launched.
+                if result_text.startswith(_DRY_PREFIX):
+                    dry_results.append(result_text)
+
+                lowered = result_text.lower()
                 if "failed" in lowered or "couldn't" in lowered:
                     failures[name] = failures.get(name, 0) + 1
 
@@ -177,13 +201,21 @@ class AgentLoop:
                     "role": "tool",
                     "tool_call_id": call.get("id") or name,
                     "name": name,
-                    "content": str(result),
+                    "content": result_text,
                 })
 
                 if failures.get(name, 0) >= MAX_RETRIES_PER_TOOL:
                     log_event("agent_tool_giving_up", tool=name)
                     return (f"I tried {name.replace('_', ' ')} twice and it "
                             "kept failing, so I've stopped.")
+
+            # Report dry runs ourselves, in the gate's own words. The model is
+            # not asked to summarise an action that did not occur.
+            if dry_results:
+                log_event("agent_dry_run_reported", count=len(dry_results))
+                joined = " ".join(dry_results)
+                return (f"Safety mode is on, so nothing was changed. {joined}. "
+                        "Turn safety mode off in Settings to let me act.")
 
         log_event("agent_cap_reached", text=text[:120])
         return ("This is more complex than I can handle in one go. "

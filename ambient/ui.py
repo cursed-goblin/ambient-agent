@@ -1,12 +1,17 @@
 """
-Local web UI -- HTTP server, SSE event stream, command endpoint, config API.
+Simple local UI (interim Phase 2).
 
-New in this version:
-  GET  /api/config  -- return current provider config (key masked)
-  POST /api/config  -- save new config, fire on_config_change callback
+A tiny stdlib HTTP server plus Server-Sent Events. No Tauri, no Electron, no
+npm, no build step -- open a browser at http://127.0.0.1:8765 and you can see
+what the agent is doing and type to it.
 
-The UI now handles its own setup wizard and settings panel.
-No terminal wizard is needed on first run.
+Why a browser page rather than the planned transparent overlay: it works today
+on a laptop with no GPU, and it works over a forwarded port from a cloud dev
+box, which is where this is being developed. The real always-on-top overlay is
+still Phase 2 proper. This exists so the agent is observable in the meantime.
+
+Binds to 127.0.0.1 by default. It is not authenticated, so do not expose it on
+a network you do not trust.
 """
 
 from __future__ import annotations
@@ -28,22 +33,17 @@ INDEX = UI_DIR / "index.html"
 
 class UiServer:
     """
-    Serves the page, streams state, accepts typed commands, handles config.
+    Serves the page, streams state, accepts typed commands.
 
-    Callbacks (all optional, all called on an HTTP thread -- must be quick):
-      on_command(text)       -- a command was typed or spoken in the UI
-      get_config()           -- return the current provider cfg dict
-      on_config_change(cfg)  -- user saved new settings; reload the escalator
+    on_command is called on the HTTP thread, so the callback must be quick and
+    thread-safe. main.py hands work to the assistant's own queue.
     """
 
-    def __init__(
-        self,
-        on_command: Callable[[str], None],
-        get_config: Optional[Callable[[], dict]] = None,
-        on_config_change: Optional[Callable[[dict], None]] = None,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
-    ) -> None:
+    def __init__(self, on_command: Callable[[str], None],
+                 host: Optional[str] = None,
+                 port: Optional[int] = None,
+                 get_config: Optional[Callable[[], dict]] = None,
+                 on_config_change: Optional[Callable[[dict], None]] = None) -> None:
         self.on_command = on_command
         self.get_config = get_config
         self.on_config_change = on_config_change
@@ -79,12 +79,11 @@ class UiServer:
             del self._history[:-200]
         self._broadcast({"type": "message", "message": entry})
 
+    def set_ai_status(self, label: str) -> None:
+        self._broadcast({"type": "ai_status", "label": label})
+
     def set_banner(self, text: str) -> None:
         self._broadcast({"type": "banner", "text": text})
-
-    def notify(self, kind: str, payload: Optional[dict] = None) -> None:
-        """Generic push for setup-complete, config-saved, etc."""
-        self._broadcast({"type": kind, **(payload or {})})
 
     # -- lifecycle ------------------------------------------------------
     def start(self) -> str:
@@ -93,7 +92,10 @@ class UiServer:
         self._server = server
         self._thread = threading.Thread(target=server.serve_forever, daemon=True)
         self._thread.start()
+
+        # Mirror every state change into the browser.
         current().subscribe(lambda _s: self.push_state())
+
         url = "http://" + str(self.host) + ":" + str(self.port)
         log_event("ui_started", url=url)
         return url
@@ -120,40 +122,37 @@ class UiServer:
             if q in self._clients:
                 self._clients.remove(q)
 
-    def _config_public(self) -> dict:
-        """Return current config with key masked for the browser."""
-        cfg = {}
-        if self.get_config:
-            try:
-                cfg = dict(self.get_config() or {})
-            except Exception:  # noqa: BLE001
-                cfg = {}
-        if cfg.get("api_key"):
-            cfg["api_key"] = "*" * min(8, len(cfg["api_key"]))
-            cfg["key_set"] = True
-        else:
-            cfg["key_set"] = False
-        return cfg
 
-
-def _make_handler(ui: UiServer):  # noqa: C901
+def _make_handler(ui: UiServer):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
         def log_message(self, *_args) -> None:
-            pass
+            pass  # keep the agent's console readable
 
         # -- GET --------------------------------------------------------
         def do_GET(self) -> None:  # noqa: N802
-            path = self.path.split("?")[0]
-            if path in ("/", "/index.html"):
+            if self.path in ("/", "/index.html"):
                 self._serve_index()
-            elif path == "/events":
+            elif self.path == "/events":
                 self._serve_events()
-            elif path == "/state":
+            elif self.path == "/state":
                 self._send_json(current().snapshot())
-            elif path == "/api/config":
-                self._send_json(ui._config_public())
+            elif self.path == "/api/config":
+                cfg = {}
+                if ui.get_config is not None:
+                    try:
+                        cfg = dict(ui.get_config() or {})
+                    except Exception:
+                        cfg = {}
+                # never echo the full secret back to the browser
+                key = cfg.get("api_key") or ""
+                if key:
+                    cfg["api_key"] = key[:4] + "..." + key[-4:] if len(key) > 10 else "..."
+                    cfg["has_key"] = True
+                else:
+                    cfg["has_key"] = False
+                self._send_json(cfg)
             else:
                 self.send_error(404)
 
@@ -182,7 +181,7 @@ def _make_handler(ui: UiServer):  # noqa: C901
                         data = q.get(timeout=15)
                         chunk = f"data: {data}\n\n"
                     except queue.Empty:
-                        chunk = ": ping\n\n"
+                        chunk = ": ping\n\n"      # keep the connection warm
                     self.wfile.write(chunk.encode("utf-8"))
                     self.wfile.flush()
             except (BrokenPipeError, ConnectionResetError, OSError):
@@ -192,15 +191,12 @@ def _make_handler(ui: UiServer):  # noqa: C901
 
         # -- POST -------------------------------------------------------
         def do_POST(self) -> None:  # noqa: N802
-            path = self.path.split("?")[0]
-            if path == "/command":
-                self._handle_command()
-            elif path == "/api/config":
-                self._handle_config_save()
-            else:
+            if self.path == "/api/config":
+                self._handle_config_post()
+                return
+            if self.path != "/command":
                 self.send_error(404)
-
-        def _handle_command(self) -> None:
+                return
             length = int(self.headers.get("Content-Length") or 0)
             raw = self.rfile.read(length) if length else b"{}"
             try:
@@ -212,51 +208,62 @@ def _make_handler(ui: UiServer):  # noqa: C901
                 log_event("ui_command", text=text[:200])
                 try:
                     ui.on_command(text)
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:  # a UI must never crash the agent
                     log_event("ui_command_error", error=str(exc)[:200])
             self._send_json({"ok": True})
 
-        def _handle_config_save(self) -> None:
+        def _handle_config_post(self) -> None:
+            from ambient import llm, provider
             length = int(self.headers.get("Content-Length") or 0)
             raw = self.rfile.read(length) if length else b"{}"
             try:
                 body = json.loads(raw.decode("utf-8"))
             except ValueError:
-                self.send_error(400, "bad json")
+                self._send_json({"ok": False, "error": "bad json"})
                 return
 
-            import ambient.provider as prov
+            name = (body.get("provider") or "none").strip()
+            cfg = {
+                "provider": name,
+                "base_url": (body.get("base_url") or "").strip(),
+                "model": (body.get("model") or "").strip(),
+                "api_key": (body.get("api_key") or "").strip(),
+                "private": name == "ollama",
+            }
 
-            provider_name = body.get("provider", "none")
-            preset = dict(prov.PRESETS.get(provider_name, prov.PRESETS["none"]))
+            # blank key means "keep the one already saved"
+            if not cfg["api_key"] and ui.get_config is not None:
+                try:
+                    cfg["api_key"] = (ui.get_config() or {}).get("api_key", "")
+                except Exception:
+                    pass
 
-            # Overlay the user-supplied fields.
-            if body.get("api_key") and body["api_key"] not in ("", "*" * 8):
-                preset["api_key"] = body["api_key"].strip()
-            if body.get("base_url"):
-                preset["base_url"] = body["base_url"].strip().rstrip("/")
-            if body.get("model"):
-                preset["model"] = body["model"].strip()
+            if name in ("none", ""):
+                cfg["provider"] = "none"
+                provider.save(cfg)
+                if ui.on_config_change:
+                    ui.on_config_change(cfg)
+                ui.set_ai_status("no AI")
+                self._send_json({"ok": True, "provider": "none"})
+                return
 
-            # For edits that don't resupply the key, keep the old one.
-            if provider_name == "groq" and not preset.get("api_key"):
-                old_cfg = ui.get_config() if ui.get_config else None
-                if old_cfg and old_cfg.get("provider") == "groq":
-                    preset["api_key"] = old_cfg.get("api_key", "")
+            # Prove it works BEFORE saving. No silent broken states.
+            client = llm.LlmClient(cfg["base_url"], cfg["api_key"], cfg["model"])
+            ok, detail = client.ping()
+            if not ok:
+                self._send_json({"ok": False, "error": detail[:200]})
+                return
 
-            prov.save(preset)
-            log_event("ui_config_saved", provider=provider_name)
-
+            provider.save(cfg)
             if ui.on_config_change:
                 try:
-                    ui.on_config_change(preset)
-                except Exception as exc:  # noqa: BLE001
-                    log_event("ui_config_reload_error", error=str(exc)[:200])
-
-            # Broadcast so all open tabs update their badges.
-            ui.notify("config_saved", {"provider": prov.describe(preset),
-                                        "is_setup": False})
-            self._send_json({"ok": True, "provider": prov.describe(preset)})
+                    ui.on_config_change(cfg)
+                except Exception as exc:
+                    self._send_json({"ok": False, "error": str(exc)[:200]})
+                    return
+            ui.set_ai_status(name)
+            log_event("ui_config_saved", provider=name, model=cfg["model"])
+            self._send_json({"ok": True, "provider": name})
 
         def _send_json(self, payload: dict) -> None:
             body = json.dumps(payload, default=str).encode("utf-8")

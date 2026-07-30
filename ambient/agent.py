@@ -1,1 +1,156 @@
-IiIiCkFnZW50aWMgbG9vcCAtLSBuYXR1cmFsIGxhbmd1YWdlIHRvIHRvb2wgY2FsbHMuCgpJbnN0ZWFkIG9mIHJlZ2V4IHJ1bGVzLCB0aGUgQUkgbW9kZWwgcmVjZWl2ZXMgdGhlIHVzZXIncyB3b3JkcyBhbmQgZGVjaWRlcwp3aGljaCB0b29sIHRvIGNhbGwgd2l0aCB3aGF0IGFyZ3VtZW50cy4gV2UgZXhlY3V0ZSB0aGUgdG9vbCBsb2NhbGx5LCBmZWVkCnRoZSByZXN1bHQgYmFjayB0byB0aGUgbW9kZWwsIGFuZCByZXBlYXQgdW50aWwgdGhlIG1vZGVsIGdpdmVzIGEgZmluYWwgc3Bva2VuCmFuc3dlci4gTm8gaW50ZW50IG1hdGNoaW5nLiBObyBoYW5kLWNvZGVkIHBocmFzZXMuCgpUaGUgbW9kZWwgc2VlczoKICAtIEEgc3lzdGVtIHByb21wdCBleHBsYWluaW5nIGl0cyByb2xlIGFuZCBzYWZldHkgbGltaXRzCiAgLSBUaGUgdG9vbCBzY2hlbWFzICh3aGF0IGZ1bmN0aW9ucyBpdCBjYW4gY2FsbCkKICAtIFRoZSBjb252ZXJzYXRpb24gc28gZmFyCgpUaGUgbW9kZWwgY2FsbHMgdG9vbHMuIFdlIHJ1biB0aGVtLiBUaGUgbW9kZWwgc3BlYWtzIHRoZSByZXN1bHQuCgpTYWZldHkgY29udHJhY3Q6CiAgLSBUb29scyBoYXZlIG5vIG5ldHdvcmsgYWNjZXNzIGV4Y2VwdCBnZXRfaW5mbyAobm1jbGksIHJlYWQtb25seSkKICAtIERSWV9SVU4gbW9kZSBpcyByZXNwZWN0ZWQgYnkgZXZlcnkgdG9vbCBoYW5kbGVyCiAgLSBBIGRhbmdlciBsaXN0IG9mIHNoZWxsIHN0cmluZ3MgaXMgY2hlY2tlZCBiZWZvcmUgYW55IHRvb2wgY2FsbAogIC0gTWF4IDYgdG9vbCBjYWxscyBwZXIgdHVybiB0byBwcmV2ZW50IHJ1bmF3YXkgbG9vcHMKCkZhbGxiYWNrOiBpZiBubyBtb2RlbCBpcyBjb25maWd1cmVkIChwcm92aWRlciA9IG5vbmUpLCBhIG1pbmltYWwgb2ZmbGluZQpoYW5kbGVyIHRyaWVzIHRoZSBvbGQgcnVsZXMgbGF5ZXIgc28gYmFzaWMgY29tbWFuZHMgc3RpbGwgd29yay4KIiIiCgpmcm9tIF9fZnV0dXJlX18gaW1wb3J0IGFubm90YXRpb25zCgppbXBvcnQganNvbgpmcm9tIHR5cGluZyBpbXBvcnQgQ2FsbGFibGUsIE9wdGlvbmFsCgpmcm9tIGFtYmllbnQgaW1wb3J0IHRvb2xzIGFzIHRvb2xfbW9kCmZyb20gYW1iaWVudC5sbG0gaW1wb3J0IExsbUNsaWVudCwgTGxtRXJyb3IKZnJvbSBhbWJpZW50LnN0YXRlIGltcG9ydCBsb2dfZXZlbnQKCk1BWF9UT09MX0NBTExTID0gNgoKU1lTVEVNX1BST01QVCA9ICIiIllvdSBhcmUgYSB2b2ljZSBhc3Npc3RhbnQgdGhhdCBjb250cm9scyBhIExpbnV4IGNvbXB1dGVyLgoKWW91IGhhdmUgYSBzZXQgb2YgdG9vbHMgZm9yIHN5c3RlbSBjb250cm9sOiB2b2x1bWUsIGJyaWdodG5lc3MsIGFwcHMsIHRpbWVycywKbWVkaWEgcGxheWJhY2ssIGFuZCBzeXN0ZW0gaW5mby4gVXNlIHRoZW0gdG8gZnVsZmlsbCB0aGUgdXNlcidzIHJlcXVlc3QuCgpSdWxlczoKMS4gRm9yIGNvbnRyb2wgdGFza3MgKHZvbHVtZSwgYnJpZ2h0bmVzcywgYXBwcywgdGltZXJzLCBldGMuKSwgY2FsbCB0aGUgcmlnaHQgdG9vbC4KMi4gRm9yIGdlbmVyYWwgcXVlc3Rpb25zIChmYWN0cywgZGVmaW5pdGlvbnMsIG1hdGhzLCBjb252ZXJzaW9ucykgLS0gYW5zd2VyIGRpcmVjdGx5CiAgIGluIHBsYWluIHNwb2tlbiBFbmdsaXNoLiBEbyBub3QgY2FsbCBhIHRvb2wgZm9yIHRoZXNlLgozLiBGb3IgZ3JlZXRpbmdzIGFuZCBzbWFsbCB0YWxrIC0tIHJlcGx5IG5hdHVyYWxseSBhbmQgYnJpZWZseS4KNC4gRm9yIGFueXRoaW5nIHlvdSBjYW5ub3QgZG8gKGxpdmUgcHJpY2VzLCBib29raW5nLCBwYXltZW50cywgYW55dGhpbmcgbmVlZGluZwogICBhIHJlYWwgYnJvd3NlciB3aXRoIGxvZ2luKSAtLSBzYXkgc29ycnkgYnJpZWZseSBhbmQgZXhwbGFpbiB3aHkuCjUuIE5ldmVyIHNheSB5b3UgaGF2ZSBkb25lIHNvbWV0aGluZyB5b3UgaGF2ZSBub3QuIFRoZSB0b29sIHJlc3VsdCB0ZWxscyB5b3Ugd2hhdAogICBhY3R1YWxseSBoYXBwZW5lZC4KNi4gS2VlcCBhbGwgcmVwbGllcyB1bmRlciAyLTMgc2VudGVuY2VzLiBUaGV5IHdpbGwgYmUgc3Bva2VuIGFsb3VkLgo3LiBObyBtYXJrZG93biwgbm8gbGlzdHMsIG5vIGVtb2ppIGluIHNwb2tlbiByZXBsaWVzLiIiIgoKIyBQYXR0ZXJucyB0aGF0IHNob3VsZCBuZXZlciBhcHBlYXIgaW4gdG9vbCBhcmd1bWVudHMgcmVnYXJkbGVzcyBvZiB3aGF0IHRoZQojIG1vZGVsIGRlY2lkZXMuCl9EQU5HRVIgPSBbCiAgICAicm0gLXJmIiwgImRkIGlmPSIsICJta2ZzIiwgIj4gL2RldiIsICJzaHV0ZG93biIsICJyZWJvb3QiLAogICAgImNobW9kIC1SIDc3NyIsICJjdXJsIHwgc2giLCAid2dldCB8IHNoIiwgImZvcmsgYm9tYiIsCiAgICAiOigpeyA6fDoiLCAiL2V0Yy9wYXNzd2QiLCAiL2V0Yy9zaGFkb3ciLApdCgoKZGVmIF9pc19zYWZlKGFyZ3M6IGRpY3QpIC0+IGJvb2w6CiAgICBmbGF0ID0ganNvbi5kdW1wcyhhcmdzKS5sb3dlcigpCiAgICByZXR1cm4gbm90IGFueShkIGluIGZsYXQgZm9yIGQgaW4gX0RBTkdFUikKCgpjbGFzcyBBZ2VudExvb3A6CiAgICAiIiIKICAgIE9uZSBpbnN0YW5jZSBwZXIgYXNzaXN0YW50IHNlc3Npb24uIENhbGwgaGFuZGxlKHRleHQpIGZvciBlYWNoIHV0dGVyYW5jZS4KICAgICIiIgoKICAgIGRlZiBfX2luaXRfXygKICAgICAgICBzZWxmLAogICAgICAgIGNsaWVudDogT3B0aW9uYWxbTGxtQ2xpZW50XSwKICAgICAgICBzcGVha19jYWxsYmFjazogQ2FsbGFibGVbW3N0cl0sIE5vbmVdLAogICAgKSAtPiBOb25lOgogICAgICAgIHNlbGYuY2xpZW50ID0gY2xpZW50CiAgICAgICAgc2VsZi5fc3BlYWsgPSBzcGVha19jYWxsYmFjawogICAgICAgICMgV2lyZSB0aGUgdGltZXIgZmlyZSBjYWxsYmFjayBzbyBpdCBjYW4gY2FsbCBzcGVha19jYWxsYmFjawogICAgICAgIHRvb2xfbW9kLmluaXRfdGltZXJfY2FsbGJhY2soc3BlYWtfY2FsbGJhY2spCgogICAgQHByb3BlcnR5CiAgICBkZWYgYXZhaWxhYmxlKHNlbGYpIC0+IGJvb2w6CiAgICAgICAgcmV0dXJuIHNlbGYuY2xpZW50IGlzIG5vdCBOb25lCgogICAgZGVmIGhhbmRsZShzZWxmLCB0ZXh0OiBzdHIpIC0+IHN0cjoKICAgICAgICAiIiIKICAgICAgICBQcm9jZXNzIG9uZSB1c2VyIHV0dGVyYW5jZS4gUmV0dXJucyB0aGUgZmluYWwgc3Bva2VuIHJlcGx5IHN0cmluZy4KICAgICAgICBVc2VzIHRoZSB0b29sLWNhbGxpbmcgbG9vcCB3aGVuIGEgbW9kZWwgaXMgYXZhaWxhYmxlLCBmYWxscyBiYWNrIHRvCiAgICAgICAgdGhlIHJ1bGVzIGxheWVyIG90aGVyd2lzZS4KICAgICAgICAiIiIKICAgICAgICBpZiBzZWxmLmNsaWVudCBpcyBOb25lOgogICAgICAgICAgICByZXR1cm4gc2VsZi5fb2ZmbGluZV9mYWxsYmFjayh0ZXh0KQoKICAgICAgICBtZXNzYWdlczogbGlzdFtkaWN0XSA9IFsKICAgICAgICAgICAgeyJyb2xlIjogInN5c3RlbSIsICJjb250ZW50IjogU1lTVEVNX1BST01QVH0sCiAgICAgICAgICAgIHsicm9sZSI6ICJ1c2VyIiwgICAiY29udGVudCI6IHRleHR9LAogICAgICAgIF0KCiAgICAgICAgZm9yIGl0ZXJhdGlvbiBpbiByYW5nZShNQVhfVE9PTF9DQUxMUyk6CiAgICAgICAgICAgIHRyeToKICAgICAgICAgICAgICAgIHJlc3BvbnNlID0gc2VsZi5jbGllbnQuY2hhdF93aXRoX3Rvb2xzKAogICAgICAgICAgICAgICAgICAgIG1lc3NhZ2VzPW1lc3NhZ2VzLAogICAgICAgICAgICAgICAgICAgIHRvb2xzPXRvb2xfbW9kLlNDSEVNQVMsCiAgICAgICAgICAgICAgICApCiAgICAgICAgICAgIGV4Y2VwdCBMbG1FcnJvciBhcyBleGM6CiAgICAgICAgICAgICAgICBsb2dfZXZlbnQoImFnZW50X2xsbV9lcnJvciIsIGVycm9yPXN0cihleGMpWzoyMDBdKQogICAgICAgICAgICAgICAgcHJpbnQoZiJbYWdlbnRdIExMTSBlcnJvcjoge2V4Y30iKQogICAgICAgICAgICAgICAgcmV0dXJuICJTb3JyeSwgSSBjb3VsZCBub3QgcmVhY2ggdGhlIEFJIG1vZGVsIHJpZ2h0IG5vdy4iCgogICAgICAgICAgICB0b29sX2NhbGxzID0gcmVzcG9uc2UuZ2V0KCJ0b29sX2NhbGxzIikgb3IgW10KCiAgICAgICAgICAgIGlmIG5vdCB0b29sX2NhbGxzOgogICAgICAgICAgICAgICAgIyBNb2RlbCBnYXZlIGEgZmluYWwgdGV4dCByZXBseQogICAgICAgICAgICAgICAgcmVwbHkgPSAocmVzcG9uc2UuZ2V0KCJjb250ZW50Iikgb3IgIiIpLnN0cmlwKCkKICAgICAgICAgICAgICAgIGlmIG5vdCByZXBseToKICAgICAgICAgICAgICAgICAgICByZXBseSA9ICJEb25lLiIKICAgICAgICAgICAgICAgIGxvZ19ldmVudCgiYWdlbnRfcmVwbHkiLCByZXBseT1yZXBseVs6MjAwXSwgaXRlcmF0aW9ucz1pdGVyYXRpb24pCiAgICAgICAgICAgICAgICByZXR1cm4gcmVwbHkKCiAgICAgICAgICAgICMgLS0tIGV4ZWN1dGUgZWFjaCB0b29sIGNhbGwgLS0tCiAgICAgICAgICAgICMgQXBwZW5kIHRoZSBhc3Npc3RhbnQgbWVzc2FnZSB3aXRoIHRvb2xfY2FsbHMgZmlyc3QKICAgICAgICAgICAgbWVzc2FnZXMuYXBwZW5kKHsKICAgICAgICAgICAgICAgICJyb2xlIjogImFzc2lzdGFudCIsCiAgICAgICAgICAgICAgICAiY29udGVudCI6IHJlc3BvbnNlLmdldCgiY29udGVudCIpIG9yICIiLAogICAgICAgICAgICAgICAgInRvb2xfY2FsbHMiOiB0b29sX2NhbGxzLAogICAgICAgICAgICB9KQoKICAgICAgICAgICAgZm9yIHRjIGluIHRvb2xfY2FsbHM6CiAgICAgICAgICAgICAgICBmbiAgID0gdGMuZ2V0KCJmdW5jdGlvbiIsIHt9KQogICAgICAgICAgICAgICAgbmFtZSA9IGZuLmdldCgibmFtZSIsICIiKQogICAgICAgICAgICAgICAgdHJ5OgogICAgICAgICAgICAgICAgICAgIGFyZ3MgPSBqc29uLmxvYWRzKGZuLmdldCgiYXJndW1lbnRzIiwgInt9IikpCiAgICAgICAgICAgICAgICBleGNlcHQgKGpzb24uSlNPTkRlY29kZUVycm9yLCBUeXBlRXJyb3IpOgogICAgICAgICAgICAgICAgICAgIGFyZ3MgPSB7fQoKICAgICAgICAgICAgICAgIGxvZ19ldmVudCgidG9vbF9jYWxsIiwgdG9vbD1uYW1lLCBhcmdzPWFyZ3MsIGl0ZXJhdGlvbj1pdGVyYXRpb24pCgogICAgICAgICAgICAgICAgaWYgbm90IF9pc19zYWZlKGFyZ3MpOgogICAgICAgICAgICAgICAgICAgIHJlc3VsdCA9IGYiQmxvY2tlZDogZGFuZ2Vyb3VzIGFyZ3VtZW50IGRldGVjdGVkIGZvciB7bmFtZX0uIgogICAgICAgICAgICAgICAgICAgIGxvZ19ldmVudCgidG9vbF9ibG9ja2VkIiwgdG9vbD1uYW1lKQogICAgICAgICAgICAgICAgZWxzZToKICAgICAgICAgICAgICAgICAgICByZXN1bHQgPSB0b29sX21vZC5leGVjdXRlKG5hbWUsIGFyZ3MpCgogICAgICAgICAgICAgICAgbWVzc2FnZXMuYXBwZW5kKHsKICAgICAgICAgICAgICAgICAgICAicm9sZSI6ICJ0b29sIiwKICAgICAgICAgICAgICAgICAgICAidG9vbF9jYWxsX2lkIjogdGMuZ2V0KCJpZCIsICJjYWxsXzAiKSwKICAgICAgICAgICAgICAgICAgICAiY29udGVudCI6IHJlc3VsdCwKICAgICAgICAgICAgICAgIH0pCgogICAgICAgICMgSGl0IHRoZSBpdGVyYXRpb24gbGltaXQgLS0gYXNrIHRoZSBtb2RlbCBvbmUgbW9yZSB0aW1lIHdpdGggbm8gdG9vbHMKICAgICAgICBsb2dfZXZlbnQoImFnZW50X2l0ZXJhdGlvbl9saW1pdCIsIHRleHQ9dGV4dFs6ODBdKQogICAgICAgIHJldHVybiAiVGhhdCB0b29rIHRvbyBtYW55IHN0ZXBzLiBQbGVhc2UgdHJ5IGEgc2ltcGxlciByZXF1ZXN0LiIKCiAgICBkZWYgX29mZmxpbmVfZmFsbGJhY2soc2VsZiwgdGV4dDogc3RyKSAtPiBzdHI6CiAgICAgICAgIiIiCiAgICAgICAgV2hlbiBubyBtb2RlbCBpcyBjb25maWd1cmVkLCB0cnkgdGhlIG9sZCBydWxlcyBsYXllciBmb3IgYmFzaWMgY29tbWFuZHMKICAgICAgICBzbyB0aGluZ3MgbGlrZSB0aW1lcnMgYW5kIHZvbHVtZSBzdGlsbCB3b3JrIHdpdGhvdXQgYSBrZXkuCiAgICAgICAgIiIiCiAgICAgICAgdHJ5OgogICAgICAgICAgICBmcm9tIGFtYmllbnQgaW1wb3J0IHJ1bGVzCiAgICAgICAgICAgIGZyb20gYW1iaWVudCBpbXBvcnQgYWN0aW9ucyAgIyBub3FhOiBQTEMwNDE1IChsYXp5LCBhdm9pZHMgY2lyY3VsYXIpCiAgICAgICAgICAgIGludGVudCA9IHJ1bGVzLm1hdGNoKHRleHQpCiAgICAgICAgICAgIGlmIGludGVudCBpcyBOb25lOgogICAgICAgICAgICAgICAgcmV0dXJuICJObyBBSSBtb2RlbCBpcyBjb25maWd1cmVkLiBPcGVuIFNldHRpbmdzIGluIHRoZSBVSSB0byBhZGQgYSBHcm9xIEFQSSBrZXkuIgogICAgICAgICAgICBpZiBydWxlcy5pc19jb250cm9sKGludGVudCk6CiAgICAgICAgICAgICAgICByZXR1cm4gIiIgICMgY29udHJvbCBpbnRlbnRzIGhhbmRsZWQgYmVmb3JlIHRoaXMgY2FsbAogICAgICAgICAgICBkaXNwYXRjaCA9IGFjdGlvbnMuYnVpbGRfZGlzcGF0Y2goTm9uZSkKICAgICAgICAgICAgaGFuZGxlciA9IGRpc3BhdGNoLmdldChpbnRlbnQubmFtZSkKICAgICAgICAgICAgaWYgaGFuZGxlcjoKICAgICAgICAgICAgICAgIHJldHVybiBoYW5kbGVyKGludGVudCkKICAgICAgICBleGNlcHQgRXhjZXB0aW9uIGFzIGV4YzogICMgbm9xYTogQkxFMDAxCiAgICAgICAgICAgIGxvZ19ldmVudCgib2ZmbGluZV9mYWxsYmFja19lcnJvciIsIGVycm9yPXN0cihleGMpWzoxMDBdKQogICAgICAgIHJldHVybiAiTm8gQUkgbW9kZWwgaXMgY29uZmlndXJlZC4gT3BlbiBTZXR0aW5ncyBpbiB0aGUgVUkgdG8gYWRkIGEgR3JvcSBBUEkga2V5LiIK
+"""
+The agent loop.
+
+This replaces regex intent matching. The flow is:
+
+    user text -> model (with tool schemas) -> model picks tool(s)
+              -> we execute -> results back to model -> model speaks
+
+We never decide what the user meant. The model does. Our job is only to
+execute safely and keep the loop bounded.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Callable, Optional
+
+from ambient import llm, tools
+
+MAX_TOOL_CALLS = 6
+
+SYSTEM_PROMPT = """You are Ambient, a hands-free assistant running on the \
+user's own Linux computer.
+
+You control the machine by calling tools. When the user asks for something you \
+have a tool for, CALL THE TOOL -- do not describe how to do it, do not ask for \
+confirmation, just do it. You may call several tools in a row if a request \
+needs it.
+
+Interpret natural, messy speech generously. Transcription is imperfect, so \
+infer intent from context:
+  "whatsapp buddy"        -> open_app("whatsapp")
+  "timer check"           -> get_timer_remaining()
+  "make it louder"        -> step_volume("up")
+  "too bright"            -> step_brightness("down")
+  "quarter hour timer"    -> start_timer(900)
+
+Convert spoken durations to seconds yourself ("ten minutes" -> 600).
+
+If no tool fits, just answer conversationally -- you are also a normal \
+assistant and can chat, do arithmetic, and answer questions.
+
+You are speaking out loud. Replies must be ONE short sentence, plain spoken \
+English, no markdown, no lists, no emoji. Confirm what you did, briefly.
+"""
+
+# Substrings we refuse to let the model push into a shell, no matter what.
+_DANGER = [
+    "rm -rf", "dd if=", "mkfs", "> /dev", "shutdown", "reboot",
+    "chmod -R 777", "curl | sh", "wget | sh", "fork bomb", ":(){ :|:",
+    "/etc/passwd", "/etc/shadow",
+]
+
+
+def _is_safe(arguments: dict) -> bool:
+    blob = json.dumps(arguments or {}).lower()
+    return not any(bad in blob for bad in _DANGER)
+
+
+class AgentLoop:
+    """Owns one conversation with the model."""
+
+    def __init__(self, client: Optional[llm.LlmClient],
+                 speak_callback: Optional[Callable[[str], None]] = None,
+                 history_turns: int = 6) -> None:
+        self.client = client
+        self.speak_callback = speak_callback
+        self.history_turns = history_turns
+        self.history: list[dict] = []
+
+    # ------------------------------------------------------------------
+    def handle(self, text: str) -> str:
+        text = (text or "").strip()
+        if not text:
+            return ""
+        if self.client is None:
+            return self._offline_fallback(text)
+
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages.extend(self.history[-self.history_turns * 2:])
+        messages.append({"role": "user", "content": text})
+
+        used_a_tool = False
+
+        for _ in range(MAX_TOOL_CALLS):
+            try:
+                reply = self.client.chat_with_tools(messages, tools.SCHEMAS)
+            except llm.LlmError as exc:
+                return self._model_error(exc)
+
+            calls = reply.get("tool_calls") or []
+            content = (reply.get("content") or "").strip()
+
+            if not calls:
+                final = content or ("Done." if used_a_tool else
+                                    "I didn't catch that.")
+                self._remember(text, final)
+                return final
+
+            # Record the assistant's tool-call turn verbatim.
+            messages.append({
+                "role": "assistant",
+                "content": content or None,
+                "tool_calls": calls,
+            })
+
+            for call in calls:
+                used_a_tool = True
+                fn = call.get("function", {})
+                name = fn.get("name", "")
+                raw = fn.get("arguments") or "{}"
+                try:
+                    args = json.loads(raw) if isinstance(raw, str) else raw
+                except json.JSONDecodeError:
+                    args = {}
+
+                if not _is_safe(args):
+                    result = "error: refused for safety"
+                else:
+                    result = tools.execute(name, args)
+
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": call.get("id", name),
+                    "name": name,
+                    "content": str(result),
+                })
+
+        final = "That took too many steps."
+        self._remember(text, final)
+        return final
+
+    # ------------------------------------------------------------------
+    def _remember(self, user_text: str, reply: str) -> None:
+        self.history.append({"role": "user", "content": user_text})
+        self.history.append({"role": "assistant", "content": reply})
+        self.history = self.history[-self.history_turns * 2:]
+
+    def _model_error(self, exc: Exception) -> str:
+        detail = str(exc)
+        if "401" in detail or "invalid_api_key" in detail:
+            return "My API key was rejected. Check it in Settings."
+        if "403" in detail or "1010" in detail:
+            return "The AI provider blocked the request. Try another network."
+        if "429" in detail:
+            return "Rate limited. Give it a moment."
+        if "cannot reach" in detail:
+            return "I can't reach the AI provider. Check your connection."
+        return "The AI request failed."
+
+    def _offline_fallback(self, text: str) -> str:
+        return ("No AI model is connected, so I can't understand that yet. "
+                "Open Settings and add a Groq API key.")
+
+    def reset(self) -> None:
+        self.history.clear()

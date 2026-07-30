@@ -50,9 +50,12 @@ Rules, in priority order:
    weather, stock, live status, anything after your training data -- reply with
    exactly: REFUSE
 3. If you are not confident the answer is correct, reply with exactly: REFUSE
-4. Otherwise answer in at most three short sentences, plain spoken English, no
-   markdown, no lists, no emoji. It will be read aloud by a speech synthesiser.
-5. Never claim to have done anything. Never say you are opening, setting,
+4. Otherwise ANSWER. Ordinary questions are your job: general knowledge,
+   definitions, explanations, spelling, language, history, science, how things
+   work, and simple conversation. Do not refuse those.
+5. Answer in at most three short sentences, plain spoken English, no markdown,
+   no lists, no emoji. It will be read aloud by a speech synthesiser.
+6. Never claim to have done anything. Never say you are opening, setting,
    buying or checking something.
 
 REFUSE is a correct and expected answer. Being limited is fine. Being
@@ -113,7 +116,7 @@ class LlmClient:
             raise LlmError(f"unexpected response shape: {str(payload)[:200]}") from exc
 
     def ping(self) -> tuple[bool, str]:
-        """Cheap reachability check for --check-ai and the setup wizard."""
+        """Cheap reachability check for --check and the setup wizard."""
         try:
             reply = self.chat(
                 [{"role": "user", "content": "Reply with the single word: ok"}],
@@ -170,6 +173,9 @@ class Escalator:
         except LlmError as exc:
             clock.stop(ok=False)
             log_event("llm_error", provider=self.provider, error=str(exc)[:300])
+            # Visible, because a silent refusal here looks like a broken
+            # assistant rather than a broken key or a missing network.
+            print(f"[ai] escalation failed: {str(exc)[:200]}")
             return None
         clock.stop(ok=True, provider=self.provider)
 
@@ -177,6 +183,7 @@ class Escalator:
 
         if not reply or REFUSE_TOKEN in reply.upper():
             log_event("llm_refused", text=text[:120])
+            print("[ai] the model declined to answer that.")
             return None
 
         # Belt and braces: the model must never imply it acted on the system.

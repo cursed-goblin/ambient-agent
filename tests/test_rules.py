@@ -132,6 +132,28 @@ def test_info_bare_words():
     check("storage left", "info.disk")
 
 
+# ------------------------------------------------------------- small talk
+
+def test_smalltalk():
+    # "hey" is a filler word to normalise(), so this also guards the path
+    # where the whole utterance normalises to an empty string.
+    check("hey", "smalltalk.greeting")
+    check("hello", "smalltalk.greeting")
+    check("good morning", "smalltalk.greeting")
+    check("are you there", "smalltalk.presence")
+    check("how are you", "smalltalk.how_are_you")
+    check("thanks", "smalltalk.thanks")
+    check("what can you do", "smalltalk.help")
+    check("who are you", "smalltalk.identity")
+    check("bye", "smalltalk.bye")
+
+
+def test_smalltalk_does_not_hijack_commands():
+    check("hey can you please open the calculator", "app.open")
+    check("hi set volume to 40", "audio.set_volume", level=40)
+    assert rules.match("help me book a flight to tokyo") is None
+
+
 # ----------------------------------------------------------------- modes
 
 def test_mode_switching():

@@ -324,6 +324,51 @@ def try_conversion(text: str) -> Optional[Intent]:
 
 
 # --------------------------------------------------------------------------
+# Small talk (spec 4.16 tier 0). Deterministic, instant, no model involved.
+#
+# These exist because a greeting is the very first thing anyone says to a new
+# assistant, and "Sorry, I can't do that yet." is a terrible first impression.
+# They are matched AFTER the command table, so "open the calculator" still
+# wins, and they are matched against the unfiltered text because normalise()
+# treats "hey" and "ok" as filler and would delete the whole utterance.
+# --------------------------------------------------------------------------
+
+_SMALLTALK = [
+    (r"^(hey|hi|hello|yo|hiya|hey there|hi there)$", "smalltalk.greeting"),
+    (r"^good (morning|afternoon|evening)$", "smalltalk.greeting"),
+    (r"\b(are you (there|awake|listening|alive|ready)|you there|can you hear me)\b",
+     "smalltalk.presence"),
+    (r"\b(how are you|how.?s it going|how do you do|you okay)\b",
+     "smalltalk.how_are_you"),
+    (r"\b(thanks|thank you|cheers|good job|well done|nice one)\b",
+     "smalltalk.thanks"),
+    (r"^(help|what can you do|what do you do|what are your commands)$",
+     "smalltalk.help"),
+    (r"\b(who are you|what are you|what.?s your name)\b", "smalltalk.identity"),
+    (r"^(good ?night|bye|goodbye|see you|see ya)$", "smalltalk.bye"),
+]
+
+_SMALLTALK_COMPILED = [(re.compile(p), name) for p, name in _SMALLTALK]
+
+
+def _plain(text: str) -> str:
+    """Like normalise(), but keeps filler words -- "hey" is a greeting here."""
+    text = unicodedata.normalize("NFKD", text or "")
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    text = _PUNCT.sub(" ", text.lower().strip())
+    return _WS.sub(" ", text).strip()
+
+
+def try_smalltalk(plain: str) -> Optional[Intent]:
+    if not plain or len(plain) > 40:
+        return None
+    for pattern, name in _SMALLTALK_COMPILED:
+        if pattern.search(plain):
+            return Intent(name, {}, SAFE, 1.0, plain)
+    return None
+
+
+# --------------------------------------------------------------------------
 # Public entry point
 # --------------------------------------------------------------------------
 
@@ -334,9 +379,11 @@ def match(raw_text: str) -> Optional[Intent]:
     None means "escalate or refuse" -- it is NEVER an error. Per spec 4.6,
     reject-by-default is the desired behaviour.
     """
+    plain = _plain(raw_text)
     text = normalise(raw_text)
     if not text:
-        return None
+        # normalise() strips filler, so a bare "hey" becomes empty.
+        return try_smalltalk(plain)
 
     for pattern, name, risk, build_slots in _COMPILED:
         m = pattern.search(text)
@@ -357,6 +404,11 @@ def match(raw_text: str) -> Optional[Intent]:
     if intent:
         return intent
     intent = try_conversion(text)
+    if intent:
+        return intent
+
+    # Greetings and small talk: answered locally, never sent to a model.
+    intent = try_smalltalk(plain)
     if intent:
         return intent
 

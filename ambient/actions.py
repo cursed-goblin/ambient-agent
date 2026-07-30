@@ -331,6 +331,33 @@ def tier0_convert(intent: Intent) -> str:
 
 
 # --------------------------------------------------------------------------
+# Small talk -- canned, deterministic, no model, no latency
+# --------------------------------------------------------------------------
+
+SMALLTALK_REPLIES = {
+    "smalltalk.greeting": "Hello. What do you need?",
+    "smalltalk.presence": "I'm here. Go ahead.",
+    "smalltalk.how_are_you": "Running fine. What do you need?",
+    "smalltalk.thanks": "Any time.",
+    "smalltalk.identity": (
+        "I'm your assistant on this machine. I only do what I'm sure about, "
+        "and I say so when I'm not."
+    ),
+    "smalltalk.bye": "Goodbye.",
+    "smalltalk.help": (
+        "I can set volume and brightness, open and close apps, run timers, and "
+        "tell you the time, date, battery, disk, memory or wifi. I also do quick "
+        "maths and unit conversions. Anything else I pass to the AI model, or I "
+        "tell you I can't do it."
+    ),
+}
+
+
+def smalltalk(intent: Intent) -> str:
+    return SMALLTALK_REPLIES.get(intent.name, "I'm here.")
+
+
+# --------------------------------------------------------------------------
 # Dispatch table
 # --------------------------------------------------------------------------
 
@@ -379,4 +406,11 @@ def build_dispatch(timer_service: TimerService, panel=None) -> dict:
         "panel.select": panel_stub("select"),
         "tier0.math": tier0_math,
         "tier0.convert": tier0_convert,
+        "smalltalk.greeting": smalltalk,
+        "smalltalk.presence": smalltalk,
+        "smalltalk.how_are_you": smalltalk,
+        "smalltalk.thanks": smalltalk,
+        "smalltalk.identity": smalltalk,
+        "smalltalk.bye": smalltalk,
+        "smalltalk.help": smalltalk,
     }
